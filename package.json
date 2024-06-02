@@ -1,0 +1,21 @@
+{
+  "name": "nuxt-app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare"
+  },
+  "dependencies": {
+    "@tresjs/cientos": "^3.9.0",
+    "@tresjs/nuxt": "^2.1.2",
+    "@tresjs/post-processing": "^0.7.1",
+    "nuxt": "^3.11.2",
+    "three": "^0.165.0",
+    "vue": "^3.4.27",
+    "vue-router": "^4.3.2"
+  }
+}
