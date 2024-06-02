@@ -19,5 +19,6 @@
     font-size: 40px;
     display: grid;
     place-items: center;
+    backdrop-filter: blur(5px);
 }
 </style>

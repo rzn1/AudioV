@@ -72,7 +72,7 @@ function startPlayer() {
     <p @click="startPlayer()">%^*!@#(*^%!@)</p>
   </Start>
 
-  <audio ref="audioPlayer" src="https://streaming.exclusive.radio/er/onedirection/icecast.audio" crossorigin="anonymous" />
+  <audio ref="audioPlayer" :autoplay="false" crossorigin="anonymous" src="https://streaming.exclusive.radio/er/onedirection/icecast.audio" />
 
   <TresCanvas window-size :output-encoding="SRGBColorSpace">
     <Environment :background="true" files="/test6.hdr"></Environment>
