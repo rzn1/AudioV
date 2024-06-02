@@ -74,7 +74,7 @@ function startPlayer() {
 
   <audio ref="audioPlayer" :autoplay="false" crossorigin="anonymous" src="https://streaming.exclusive.radio/er/onedirection/icecast.audio" />
 
-  <TresCanvas window-size :output-encoding="SRGBColorSpace">
+  <TresCanvas window-size :antialias="true" :output-encoding="SRGBColorSpace">
     <Environment :background="true" files="/test6.hdr"></Environment>
 
     <primitive :object="camera" />
