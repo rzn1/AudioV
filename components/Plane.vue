@@ -68,7 +68,7 @@ planetData.forEach((planet) => {
     <TresCircleGeometry :args="[15, 1024]" />
   </Reflector>
 
-  <Stars :radius="50" :depth="100" :count="3000" :size="1" :size-attenuation="false" />
+  <Stars :radius="50" :depth="100" :count="5000" :size="1" :size-attenuation="false" />
 
   <EffectComposer :depth-buffer="true">
     <Noise premultiply />
