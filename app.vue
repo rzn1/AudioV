@@ -31,7 +31,7 @@ onMounted(() => {
       const analyser = new AudioAnalyser(sound, 64);
 
       camera.aspect = window.innerWidth / window.innerHeight;
-      camera.position.set(0, 0, 38);
+      camera.position.set(0, 0, 40);
       camera.updateProjectionMatrix();
 
       function animate() {
