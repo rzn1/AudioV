@@ -28,7 +28,7 @@ onMounted(() => {
       const mediaElementSource = audioContext.createMediaElementSource(audioElement);
       sound.setNodeSource(mediaElementSource);
 
-      const analyser = new AudioAnalyser(sound, 64);
+      const analyser = new AudioAnalyser(sound, 256);
 
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.position.set(0, 0, 40);
@@ -68,7 +68,7 @@ function startPlayer() {
     audioPlayer.value.play();
   }
 }
-//    <Environment :background="true" files="/test6.hdr"></Environment>
+//    
 </script>
 
 <template>
@@ -79,6 +79,8 @@ function startPlayer() {
   <audio ref="audioPlayer" :autoplay="false" crossorigin="anonymous" src="https://streaming.exclusive.radio/er/onedirection/icecast.audio" />
 
   <TresCanvas window-size :antialias="true" :output-encoding="SRGBColorSpace">
+
+    <Environment :background="true" files="/test6.hdr"></Environment>
 
     <primitive :object="camera" />
 
