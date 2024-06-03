@@ -4,7 +4,7 @@ import { AudioListener, AudioAnalyser, PerspectiveCamera, Audio, Clock, SRGBColo
 const isStarted = ref(false);
 
 const audioPlayer = ref<HTMLAudioElement>();
-const camera = new PerspectiveCamera(20, 1, 0.1, 1000);
+const camera = new PerspectiveCamera(20, 0.46, 0.1, 1000);
 const clock = new Clock();
 
 const uniforms = {
@@ -30,7 +30,7 @@ onMounted(() => {
 
       const analyser = new AudioAnalyser(sound, 64);
 
-      camera.aspect = window.innerWidth / window.innerHeight;
+      //camera.aspect = window.innerWidth / window.innerHeight;
       camera.position.set(0, 0, 38);
 
       function animate() {
