@@ -18,13 +18,22 @@ const fragmentShader = `
 uniform float u_red;
         uniform float u_blue;
         uniform float u_green;
+        varying vec2 vUv;
+
         void main() {
-            gl_FragColor = vec4(vec3(1.0, 0, 0.3), 1. );
+            vec3 topColor = vec3(u_red, u_green, u_blue); // Example: top color
+            vec3 bottomColor = vec3(1,1,1); // Example: bottom color
+            
+            // Interpolate color based on the y-coordinate of the UV
+            vec3 color = mix(bottomColor, topColor, vUv.y);
+            
+            gl_FragColor = vec4(color, 1.0);
         }
 `
 
 const vertexShader = `
 uniform float u_time;
+varying vec2 vUv;
 
       vec3 mod289(vec3 x)
       {
@@ -123,6 +132,7 @@ uniform float u_time;
       uniform float u_frequency;
 
       void main() {
+        vUv = uv;
           float noise = 4.0 * pnoise(position + u_time, vec3(10.0));
           float displacement = (u_frequency / 30.) * (noise / 10.);
           vec3 newPosition = position + normal * displacement;

@@ -11,9 +11,12 @@ const uniforms = {
   u_time: { type: 'f', value: 0.0 },
   u_frequency: { type: 'f', value: 0.0 },
   u_red: { type: 'f', value: 0.2 },
-  u_green: { type: 'f', value: 0.2 },
+  u_green: { type: 'f', value: 1 },
   u_blue: { type: 'f', value: 0.8 }
 }
+
+const speed = ref(0.03);
+const test = ref(0);
 
 onMounted(() => {
   setTimeout(() => {
@@ -37,26 +40,51 @@ onMounted(() => {
       function animate() {
         uniforms.u_time.value = clock.getElapsedTime();
         uniforms.u_frequency.value = analyser.getAverageFrequency();
-        analyzeAudio();
         requestAnimationFrame(animate);
+test.value = uniforms.u_frequency.value;
+        const bassFrequency = getBassFrequency(analyser.getFrequencyData(), 256, audioContext.sampleRate);
+        if (bassFrequency > 205) {
+          onHighBassDetected(bassFrequency);
+        }
       };
 
       animate();
 
 
-      function analyzeAudio() {
-        const bufferLength = analyser.analyser.frequencyBinCount;
-        const dataArray = new Uint8Array(bufferLength);
-        analyser.analyser.getByteFrequencyData(dataArray);
+      function getBassFrequency(data, fftSize, sampleRate) {
+        const nyquist = sampleRate / 2;
+        const bassFrequencyRange = [200, 250]; // Define the bass frequency range
+        const bassFrequencyIndexRange = [
+          Math.floor(bassFrequencyRange[0] / nyquist * (fftSize / 2)),
+          Math.floor(bassFrequencyRange[1] / nyquist * (fftSize / 2))
+        ];
 
-        const averageVolume = dataArray.reduce((acc, val) => acc + val, 0) / bufferLength;
+        let maxBass = 0;
 
-        const threshold = 100;
-
-        if (averageVolume > threshold) {
-          console.log('Big audio drop detected!');
+        for (let i = bassFrequencyIndexRange[0]; i <= bassFrequencyIndexRange[1]; i++) {
+          if (data[i] > maxBass) {
+            maxBass = data[i];
+          }
         }
-      };
+
+        return maxBass;
+      }
+
+      function onHighBassDetected(bassFrequency) {
+        console.log('High bass detected:', bassFrequency);
+        /*const { red, blue, green} = getRandomColor();
+        uniforms.u_red.value = red;
+        uniforms.u_green.value = green;
+        uniforms.u_blue.value = blue;*/
+
+        speed.value = 0.05;
+
+        // Set a timeout to revert the value back to 0.03 after 500ms
+        setTimeout(() => {
+          speed.value = 0.03;
+        }, 500);
+        // Perform any other actions needed
+      }
     }
   }, 2000);
 });
@@ -68,15 +96,25 @@ function startPlayer() {
     audioPlayer.value.play();
   }
 }
+
+function getRandomColor() {
+  const red = Math.random();
+  const blue = Math.random();
+  const green = Math.random();
+  return { red, blue, green };
+}
+
 //    
 </script>
 
 <template>
-  <Start v-if="!isStarted" >
+  <Start >
     <p @click="startPlayer()">%^*!@#(*^%!@)</p>
+    {{test}}
   </Start>
 
-  <audio ref="audioPlayer" :autoplay="false" crossorigin="anonymous" src="https://streaming.exclusive.radio/er/onedirection/icecast.audio" />
+  <audio ref="audioPlayer" :autoplay="false" crossorigin="anonymous"
+    src="https://streaming.exclusive.radio/er/onedirection/icecast.audio" />
 
   <TresCanvas window-size :antialias="true" :output-encoding="SRGBColorSpace">
 
@@ -84,7 +122,7 @@ function startPlayer() {
 
     <primitive :object="camera" />
 
-    <OrbitControls :autoRotate="true" :autoRotateSpeed="0.03" :enableZoom="false" :enablePan="false"
+    <OrbitControls :autoRotate="true" :autoRotateSpeed="speed" :enableZoom="false" :enablePan="false"
       :minPolarAngle="Math.PI / 2" :maxPolarAngle="Math.PI / 2" />
 
     <Sphere :uniforms="uniforms" />
