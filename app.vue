@@ -104,7 +104,7 @@ function getRandomColor() {
   return { red, blue, green };
 }
 
-//    
+//    <Environment :background="true" files="/test6.hdr"></Environment>
 </script>
 
 <template>
@@ -118,7 +118,7 @@ function getRandomColor() {
 
   <TresCanvas window-size :antialias="true" :output-encoding="SRGBColorSpace">
 
-    <Environment :background="true" files="/test6.hdr"></Environment>
+
 
     <primitive :object="camera" />
 
