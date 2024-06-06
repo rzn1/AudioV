@@ -16,7 +16,6 @@ const uniforms = {
 }
 
 const speed = ref(0.03);
-const test = ref(0);
 
 onMounted(() => {
   setTimeout(() => {
@@ -41,7 +40,7 @@ onMounted(() => {
         uniforms.u_time.value = clock.getElapsedTime();
         uniforms.u_frequency.value = analyser.getAverageFrequency();
         requestAnimationFrame(animate);
-test.value = uniforms.u_frequency.value;
+
         const bassFrequency = getBassFrequency(analyser.getFrequencyData(), 256, audioContext.sampleRate);
         if (bassFrequency > 205) {
           onHighBassDetected(bassFrequency);
@@ -72,17 +71,10 @@ test.value = uniforms.u_frequency.value;
 
       function onHighBassDetected(bassFrequency) {
         console.log('High bass detected:', bassFrequency);
-        /*const { red, blue, green} = getRandomColor();
+        const { red, blue, green} = getRandomColor();
         uniforms.u_red.value = red;
         uniforms.u_green.value = green;
-        uniforms.u_blue.value = blue;*/
-
-        speed.value = 0.05;
-
-        // Set a timeout to revert the value back to 0.03 after 500ms
-        setTimeout(() => {
-          speed.value = 0.03;
-        }, 500);
+        uniforms.u_blue.value = blue;
         // Perform any other actions needed
       }
     }
@@ -104,17 +96,15 @@ function getRandomColor() {
   return { red, blue, green };
 }
 
-//    <Environment :background="true" files="/test6.hdr"></Environment>
+//        <Environment :background="true" files="/test6.hdr"></Environment>
 </script>
 
 <template>
-  <Start >
+  <Start v-if="!isStarted">
     <p @click="startPlayer()">%^*!@#(*^%!@)</p>
-    {{test}}
   </Start>
 
-  <audio ref="audioPlayer" :autoplay="false" crossorigin="anonymous"
-    src="https://streaming.exclusive.radio/er/onedirection/icecast.audio" />
+  <audio ref="audioPlayer" :autoplay="false" crossorigin="anonymous" src="https://streaming.exclusive.radio/er/onedirection/icecast.audio" />
 
   <TresCanvas window-size :antialias="true" :output-encoding="SRGBColorSpace">
 
