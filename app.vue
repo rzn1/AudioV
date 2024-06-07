@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AudioListener, AudioAnalyser, PerspectiveCamera, Audio, Clock, SRGBColorSpace, AudioLoader } from 'three';
+import { Color, AudioListener, AudioAnalyser, PerspectiveCamera, Audio, Clock, SRGBColorSpace, AudioLoader } from 'three';
 
 const isStarted = ref(false);
 
@@ -8,12 +8,25 @@ const camera = new PerspectiveCamera(20, 1, 0.1, 1000);
 const clock = new Clock();
 
 const uniforms = {
-  u_time: { type: 'f', value: 0.0 },
-  u_frequency: { type: 'f', value: 0.0 },
-  u_red: { type: 'f', value: 0.2 },
-  u_green: { type: 'f', value: 1 },
-  u_blue: { type: 'f', value: 0.8 }
-}
+      u_time: {
+        value: 0.0
+      },
+      u_speed: {
+        value: 0.9
+      },
+      u_intensity: {
+        value: 0.15
+      },
+      u_partical_size: {
+        value: 265.0
+      },
+      u_color_a: {
+        value: new Color("#3f3089")
+      },
+      u_color_b: {
+        value: new Color("#00bcff")
+      }
+    }
 
 const bloomIntensity = ref(0);
 
@@ -38,7 +51,7 @@ onMounted(() => {
 
       function animate() {
         uniforms.u_time.value = clock.getElapsedTime();
-        uniforms.u_frequency.value = analyser.getAverageFrequency();
+        uniforms.u_intensity.value = scaleValue(analyser.getAverageFrequency(), 0, 100, 0, 0.8);
         requestAnimationFrame(animate);
 
         bloomIntensity.value = analyser.getFrequencyData()[0];
@@ -57,13 +70,17 @@ function startPlayer() {
   }
 }
 
-function scaleValue(input: number, inputMin: number, inputMax: number) {
-    const outputMin = 0;
-    const outputMax = 4;
+function scaleValue(value, minInput, maxInput, minOutput, maxOutput) {
+    // Ensure the value is within the input range
+    value = Math.min(Math.max(value, minInput), maxInput);
 
-    const ratio = (input - inputMin) / (inputMax - inputMin);
-    
-    return ratio * (outputMax - outputMin) + outputMin;
+    // Calculate the normalized value within the input range
+    const normalizedValue = (value - minInput) / (maxInput - minInput);
+
+    // Scale the normalized value to the output range
+    const scaledValue = normalizedValue * (maxOutput - minOutput) + minOutput;
+
+    return scaledValue;
 }
 
 //        <Environment :background="true" files="/test6.hdr"></Environment>
@@ -77,7 +94,7 @@ function scaleValue(input: number, inputMin: number, inputMax: number) {
   <audio ref="audioPlayer" :autoplay="false" crossorigin="anonymous"
     src="https://streaming.exclusive.radio/er/onedirection/icecast.audio" />
 
-  <TresCanvas window-size :antialias="true" :output-encoding="SRGBColorSpace">
+  <TresCanvas window-size :antialias="true" :alpha="true" :output-encoding="SRGBColorSpace">
 
     <primitive :object="camera" />
 
@@ -86,6 +103,6 @@ function scaleValue(input: number, inputMin: number, inputMax: number) {
 
     <Sphere :uniforms="uniforms" />
 
-    <Plane :intensity="scaleValue(bloomIntensity, 0, 250)"/>
+    <Plane :intensity="scaleValue(bloomIntensity, 0, 250, 0, 4)"/>
   </TresCanvas>
 </template>
