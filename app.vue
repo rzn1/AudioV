@@ -41,7 +41,7 @@ onMounted(() => {
         uniforms.u_frequency.value = analyser.getAverageFrequency();
         requestAnimationFrame(animate);
 
-        bloomIntensity.value = getBassFrequency(analyser.getFrequencyData(), 256, audioContext.sampleRate);
+        bloomIntensity.value = analyser.getFrequencyData()[0];
         if (bloomIntensity.value > 200) {
           //onHighBassDetected(bassFrequency);
         }
