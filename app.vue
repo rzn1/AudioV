@@ -94,7 +94,7 @@ function scaleValue(value, minInput, maxInput, minOutput, maxOutput) {
   <audio ref="audioPlayer" :autoplay="false" crossorigin="anonymous"
     src="https://streaming.exclusive.radio/er/onedirection/icecast.audio" />
 
-  <TresCanvas window-size :antialias="true" :alpha="true" :output-encoding="SRGBColorSpace">
+  <TresCanvas window-size :antialias="true" :alpha="true" :color="0x000000" :output-encoding="SRGBColorSpace">
 
     <primitive :object="camera" />
 
