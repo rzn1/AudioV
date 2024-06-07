@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AudioListener, AudioAnalyser, PerspectiveCamera, Audio, Clock, SRGBColorSpace } from 'three';
+import { AudioListener, AudioAnalyser, PerspectiveCamera, Audio, Clock, SRGBColorSpace, AudioLoader } from 'three';
 
 const isStarted = ref(false);
 
@@ -28,7 +28,7 @@ onMounted(() => {
       const audioContext = listener.context;
 
       const mediaElementSource = audioContext.createMediaElementSource(audioElement);
-      sound.setNodeSource(mediaElementSource);
+      mediaElementSource.connect(sound.gain);
 
       const analyser = new AudioAnalyser(sound, 256);
 
@@ -71,7 +71,7 @@ onMounted(() => {
 
       function onHighBassDetected(bassFrequency) {
         console.log('High bass detected:', bassFrequency);
-        const { red, blue, green} = getRandomColor();
+        const { red, blue, green } = getRandomColor();
         uniforms.u_red.value = red;
         uniforms.u_green.value = green;
         uniforms.u_blue.value = blue;
@@ -104,7 +104,8 @@ function getRandomColor() {
     <p @click="startPlayer()">%^*!@#(*^%!@)</p>
   </Start>
 
-  <audio ref="audioPlayer" :autoplay="false" crossorigin="anonymous" src="https://streaming.exclusive.radio/er/onedirection/icecast.audio" />
+  <audio ref="audioPlayer" :autoplay="false" crossorigin="anonymous"
+    src="https://streaming.exclusive.radio/er/onedirection/icecast.audio" />
 
   <TresCanvas window-size :antialias="true" :output-encoding="SRGBColorSpace">
 
