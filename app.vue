@@ -99,7 +99,7 @@ function getRandomColor() {
 function scaleValue(input: number, inputMin: number, inputMax: number) {
     // Assuming the output range is from 0 to 5
     const outputMin = 0;
-    const outputMax = 5;
+    const outputMax = 3;
 
     // Calculate the ratio of the input value relative to the input range
     const ratio = (input - inputMin) / (inputMax - inputMin);
