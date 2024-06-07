@@ -166,7 +166,7 @@ const geometry = new IcosahedronGeometry(4, 25);
 
 const material = new ShaderMaterial({ blending: AdditiveBlending, uniforms: props.uniforms, fragmentShader: fragmentShader, vertexShader: vertexShader, depthWrite: false })
 const dot = new Points(geometry, material);
-
+dot.renderOrder = 1;
 //meshWithMaterial.material.wireframe = true;
 </script>
 
