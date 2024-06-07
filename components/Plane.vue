@@ -5,6 +5,13 @@ import { Reflector, Stars } from '@tresjs/cientos'
 import { BlendFunction } from 'postprocessing';
 import { EffectComposer, Bloom, Noise } from '@tresjs/post-processing';
 
+const props = defineProps({
+  intensity: {
+    type: Number,
+    default: 0
+  }
+});
+
 const loader = new TextureLoader();
 
 const planetData = [
@@ -61,8 +68,8 @@ planetData.forEach((planet) => {
 <template>
   <primitive v-for="planet in planetData" :object="planet.Sphere" />
 
-  <TresAmbientLight/>
-  
+  <TresAmbientLight />
+
   <Reflector :rotation="[-Math.PI * 0.5, 0, 0]" :position="[0, -4.5, 0]" :clipBias="0.003" :textureWidth="1000"
     :textureHeight="1000">
     <TresCircleGeometry :args="[15, 1024]" />
@@ -72,7 +79,7 @@ planetData.forEach((planet) => {
 
   <EffectComposer :depth-buffer="true">
     <Noise premultiply />
-    <Bloom :intensity="5" :luminance-threshold="0.2" :luminance-smoothing="0.5" :mipmap-blur="true"
+    <Bloom :intensity="props.intensity" :luminance-threshold="0.2" :luminance-smoothing="0.5" :mipmap-blur="true"
       :blend-function="BlendFunction.ADD" />
   </EffectComposer>
 </template>

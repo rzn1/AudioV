@@ -15,7 +15,7 @@ const uniforms = {
   u_blue: { type: 'f', value: 0.8 }
 }
 
-const speed = ref(0.03);
+const bloomIntensity = ref(0);
 
 onMounted(() => {
   setTimeout(() => {
@@ -41,9 +41,9 @@ onMounted(() => {
         uniforms.u_frequency.value = analyser.getAverageFrequency();
         requestAnimationFrame(animate);
 
-        const bassFrequency = getBassFrequency(analyser.getFrequencyData(), 256, audioContext.sampleRate);
-        if (bassFrequency > 205) {
-          onHighBassDetected(bassFrequency);
+        bloomIntensity.value = getBassFrequency(analyser.getFrequencyData(), 256, audioContext.sampleRate);
+        if (bloomIntensity.value > 200) {
+          //onHighBassDetected(bassFrequency);
         }
       };
 
@@ -96,6 +96,18 @@ function getRandomColor() {
   return { red, blue, green };
 }
 
+function scaleValue(input: number, inputMin: number, inputMax: number) {
+    // Assuming the output range is from 0 to 5
+    const outputMin = 0;
+    const outputMax = 5;
+
+    // Calculate the ratio of the input value relative to the input range
+    const ratio = (input - inputMin) / (inputMax - inputMin);
+    
+    // Scale the ratio to the output range
+    return ratio * (outputMax - outputMin) + outputMin;
+}
+
 //        <Environment :background="true" files="/test6.hdr"></Environment>
 </script>
 
@@ -109,8 +121,6 @@ function getRandomColor() {
 
   <TresCanvas window-size :antialias="true" :output-encoding="SRGBColorSpace">
 
-
-
     <primitive :object="camera" />
 
     <OrbitControls :autoRotate="true" :autoRotateSpeed="speed" :enableZoom="false" :enablePan="false"
@@ -118,6 +128,6 @@ function getRandomColor() {
 
     <Sphere :uniforms="uniforms" />
 
-    <Plane />
+    <Plane :intensity="scaleValue(bloomIntensity, 0, 250)"/>
   </TresCanvas>
 </template>
