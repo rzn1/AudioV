@@ -42,41 +42,9 @@ onMounted(() => {
         requestAnimationFrame(animate);
 
         bloomIntensity.value = analyser.getFrequencyData()[0];
-        if (bloomIntensity.value > 200) {
-          //onHighBassDetected(bassFrequency);
-        }
       };
 
       animate();
-
-
-      function getBassFrequency(data, fftSize, sampleRate) {
-        const nyquist = sampleRate / 2;
-        const bassFrequencyRange = [0, 250]; // Define the bass frequency range
-        const bassFrequencyIndexRange = [
-          Math.floor(bassFrequencyRange[0] / nyquist * (fftSize / 2)),
-          Math.floor(bassFrequencyRange[1] / nyquist * (fftSize / 2))
-        ];
-
-        let maxBass = 0;
-
-        for (let i = bassFrequencyIndexRange[0]; i <= bassFrequencyIndexRange[1]; i++) {
-          if (data[i] > maxBass) {
-            maxBass = data[i];
-          }
-        }
-
-        return maxBass;
-      }
-
-      function onHighBassDetected(bassFrequency) {
-        console.log('High bass detected:', bassFrequency);
-        const { red, blue, green } = getRandomColor();
-        uniforms.u_red.value = red;
-        uniforms.u_green.value = green;
-        uniforms.u_blue.value = blue;
-        // Perform any other actions needed
-      }
     }
   }, 2000);
 });
@@ -89,22 +57,12 @@ function startPlayer() {
   }
 }
 
-function getRandomColor() {
-  const red = Math.random();
-  const blue = Math.random();
-  const green = Math.random();
-  return { red, blue, green };
-}
-
 function scaleValue(input: number, inputMin: number, inputMax: number) {
-    // Assuming the output range is from 0 to 5
     const outputMin = 0;
-    const outputMax = 3;
+    const outputMax = 4;
 
-    // Calculate the ratio of the input value relative to the input range
     const ratio = (input - inputMin) / (inputMax - inputMin);
     
-    // Scale the ratio to the output range
     return ratio * (outputMax - outputMin) + outputMin;
 }
 
