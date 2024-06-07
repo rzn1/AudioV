@@ -79,7 +79,7 @@ planetData.forEach((planet) => {
 
   <EffectComposer :depth-buffer="true">
     <Noise premultiply />
-    <Bloom :intensity="props.intensity" :luminance-threshold="0.2" :luminance-smoothing="0.5" :mipmap-blur="true"
+    <Bloom :intensity="props.intensity" :luminance-threshold="0.4" :luminance-smoothing="0.5" :mipmap-blur="true"
       :blend-function="BlendFunction.ADD" />
   </EffectComposer>
 </template>

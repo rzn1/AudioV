@@ -52,7 +52,7 @@ onMounted(() => {
 
       function getBassFrequency(data, fftSize, sampleRate) {
         const nyquist = sampleRate / 2;
-        const bassFrequencyRange = [200, 250]; // Define the bass frequency range
+        const bassFrequencyRange = [0, 250]; // Define the bass frequency range
         const bassFrequencyIndexRange = [
           Math.floor(bassFrequencyRange[0] / nyquist * (fftSize / 2)),
           Math.floor(bassFrequencyRange[1] / nyquist * (fftSize / 2))
@@ -123,7 +123,7 @@ function scaleValue(input: number, inputMin: number, inputMax: number) {
 
     <primitive :object="camera" />
 
-    <OrbitControls :autoRotate="true" :autoRotateSpeed="speed" :enableZoom="false" :enablePan="false"
+    <OrbitControls :autoRotate="true" :autoRotateSpeed="0.03" :enableZoom="false" :enablePan="false"
       :minPolarAngle="Math.PI / 2" :maxPolarAngle="Math.PI / 2" />
 
     <Sphere :uniforms="uniforms" />
