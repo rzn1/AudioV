@@ -95,7 +95,7 @@ function scaleValue(value, minInput, maxInput, minOutput, maxOutput) {
     src="https://streaming.exclusive.radio/er/onedirection/icecast.audio" />
 
   <TresCanvas window-size :antialias="true" :alpha="true" :clearColor="0x000000" :output-encoding="SRGBColorSpace">
-
+    <Environment :background="true" files="/test6.hdr"></Environment>
     <primitive :object="camera" />
 
     <OrbitControls :autoRotate="true" :autoRotateSpeed="0.03" :enableZoom="false" :enablePan="false"
