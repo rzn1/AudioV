@@ -70,16 +70,10 @@ function startPlayer() {
   }
 }
 
-function scaleValue(value, minInput, maxInput, minOutput, maxOutput) {
-    // Ensure the value is within the input range
+function scaleValue(value: number, minInput: number, maxInput: number, minOutput: number, maxOutput: number) {
     value = Math.min(Math.max(value, minInput), maxInput);
-
-    // Calculate the normalized value within the input range
     const normalizedValue = (value - minInput) / (maxInput - minInput);
-
-    // Scale the normalized value to the output range
     const scaledValue = normalizedValue * (maxOutput - minOutput) + minOutput;
-
     return scaledValue;
 }
 
@@ -92,10 +86,10 @@ function scaleValue(value, minInput, maxInput, minOutput, maxOutput) {
   </Start>
 
   <audio ref="audioPlayer" :autoplay="false" crossorigin="anonymous"
-    src="https://streaming.exclusive.radio/er/onedirection/icecast.audio" />
+    src="/yes.mp3" />
 
-  <TresCanvas window-size :antialias="true" :alpha="true" :clearColor="0x000000" :output-encoding="SRGBColorSpace">
-    <Environment :background="true" files="/test6.hdr"></Environment>
+  <TresCanvas window-size :antialias="true" :alpha="true" clearColor="#000000" :output-encoding="SRGBColorSpace">
+
     <primitive :object="camera" />
 
     <OrbitControls :autoRotate="true" :autoRotateSpeed="0.03" :enableZoom="false" :enablePan="false"
