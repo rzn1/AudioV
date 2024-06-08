@@ -15,10 +15,10 @@
     background-color: rgba(0, 0, 0, 0.7);
     z-index: 5;
     font-family: Arial, Helvetica, sans-serif;
-    font-weight: bold;
-    font-size: 40px;
-    display: grid;
-    place-items: center;
-    backdrop-filter: blur(5px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(8px);
 }
 </style>

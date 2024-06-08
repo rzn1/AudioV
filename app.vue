@@ -82,11 +82,12 @@ function scaleValue(value: number, minInput: number, maxInput: number, minOutput
 
 <template>
   <Start v-if="!isStarted">
-    <p @click="startPlayer()">%^*!@#(*^%!@)</p>
+    <h1 @click="startPlayer()">%^*!@#(*^%!@)</h1>
+    <small>iOS currently not supported</small>
   </Start>
 
   <audio ref="audioPlayer" :autoplay="false" crossorigin="anonymous"
-    src="/yes.mp3" />
+    src="https://streaming.exclusive.radio/er/onedirection/icecast.audio" />
 
   <TresCanvas window-size :antialias="true" :alpha="true" clearColor="#000000" :output-encoding="SRGBColorSpace">
 
