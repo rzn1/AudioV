@@ -86,6 +86,8 @@ function scaleValue(value: number, minInput: number, maxInput: number, minOutput
     <small>iOS currently not supported</small>
   </Start>
 
+  <Overflow/>
+
   <audio ref="audioPlayer" :autoplay="false" crossorigin="anonymous"
     src="https://stream.zeno.fm/5pjzf99qpzhvv" />
 

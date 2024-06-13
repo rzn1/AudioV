@@ -20,7 +20,7 @@ const props = defineProps({
 
   <Reflector :rotation="[-Math.PI * 0.5, 0, 0]" :position="[0, -4.5, 0]" :clipBias="0.003" :textureWidth="1000"
     :textureHeight="1000">
-    <TresCircleGeometry :args="[15, 1024]" />
+    <TresCircleGeometry :args="[17, 1024]" />
   </Reflector>
 
   <EffectComposer :depth-buffer="true">
