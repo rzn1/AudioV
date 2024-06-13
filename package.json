@@ -13,9 +13,13 @@
     "@tresjs/cientos": "^3.9.0",
     "@tresjs/nuxt": "^2.1.2",
     "@tresjs/post-processing": "^0.7.1",
+    "howler": "^2.2.4",
     "nuxt": "^3.11.2",
     "three": "^0.165.0",
     "vue": "^3.4.27",
     "vue-router": "^4.3.2"
+  },
+  "devDependencies": {
+    "@types/howler": "^2.2.11"
   }
 }

@@ -8,7 +8,7 @@ export default defineNuxtConfig({
       meta: [
         { name: 'description', content: '💫💫💫💫💫💫.' }
       ],
-      link: [{ rel: 'icon', type: 'image/x-icon', sizes: '32x32', href: '/favicon.ico' }]
+      link: [{ rel: 'icon', type: 'image/x-icon', sizes: '32x32', href: '/favicon.ico' }],
     }
   },
 })
