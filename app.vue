@@ -89,7 +89,7 @@ function scaleValue(value: number, minInput: number, maxInput: number, minOutput
   <Overflow/>
 
   <audio ref="audioPlayer" :autoplay="false" crossorigin="anonymous"
-    src="https://stream.zeno.fm/5pjzf99qpzhvv" />
+    src="https://stream.zeno.fm/zsnvptlhlsptv" />
 
   <TresCanvas window-size :antialias="true" :alpha="true" clearColor="#000000" :output-encoding="SRGBColorSpace">
 

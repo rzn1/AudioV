@@ -20,5 +20,34 @@
     align-items: center;
     justify-content: center;
     backdrop-filter: blur(8px);
+    box-shadow: inset 0px 0px 30px 4px #03f463;
+    animation: rainbow-shadow 2s linear infinite;
+}
+
+@keyframes rainbow-shadow {
+    0% {
+        box-shadow: inset 0px 0px 30px 4px #03f463;
+    }
+    14% {
+        box-shadow: inset 0px 0px 30px 4px red;
+    }
+    28% {
+        box-shadow: inset 0px 0px 30px 4px orange;
+    }
+    42% {
+        box-shadow: inset 0px 0px 30px 4px yellow;
+    }
+    57% {
+        box-shadow: inset 0px 0px 30px 4px green;
+    }
+    71% {
+        box-shadow: inset 0px 0px 30px 4px blue;
+    }
+    85% {
+        box-shadow: inset 0px 0px 30px 4px indigo;
+    }
+    100% {
+        box-shadow: inset 0px 0px 30px 4px violet;
+    }
 }
 </style>
