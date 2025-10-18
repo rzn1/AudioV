@@ -1,75 +1,80 @@
-# Nuxt 3 Minimal Starter
+# AudioV
 
-Look at the [Nuxt 3 documentation](https://nuxt.com/docs/getting-started/introduction) to learn more.
+AudioV is a smart audio player with 3D visualizations. It analyzes audio files to automatically mix them with crossfades and generates a dynamic 3D scene that reacts to the music.
 
-## Setup
+## Features
 
-Make sure to install the dependencies:
+*   **Smart Automix**: Automatically crossfades between tracks by analyzing audio to find the perfect transition points.
+*   **3D Audio Visualization**: A dynamic 3D scene that reacts in real-time to the music.
+*   **Custom Shaders**: Custom GLSL shaders for a unique and immersive visual experience.
+*   **Web Audio API**: Precise audio scheduling and playback.
+*   **Real-time Audio Analysis**: Audio analysis powered by Meyda.js.
+
+## Technologies Used
+
+*   **Framework**: [Nuxt.js 3](https://nuxt.com/)
+*   **Language**: [TypeScript](https://www.typescriptlang.org/)
+*   **UI**: [Vue.js 3](https://vuejs.org/)
+*   **3D Graphics**: [TresJS](https://tresjs.org/) (a declarative layer for [Three.js](https://threejs.org/))
+*   **Audio Processing**:
+    *   **Playback**: Web Audio API
+    *   **Analysis**: [Meyda.js](https://meyda.js.org/)
+*   **State Management**: [Pinia](https://pinia.vuejs.org/)
+
+## Getting Started
+
+### Prerequisites
+
+*   [Node.js](https://nodejs.org/en/) (v18 or higher)
+*   [npm](https://www.npmjs.com/)
+
+### Installation
+
+1.  Clone the repository:
+    ```bash
+    git clone https://github.com/your-username/audiov.git
+    ```
+2.  Install the dependencies:
+    ```bash
+    npm install
+    ```
+
+### Development
+
+Start the development server with hot-reloading:
 
 ```bash
-# npm
-npm install
-
-# pnpm
-pnpm install
-
-# yarn
-yarn install
-
-# bun
-bun install
-```
-
-## Development Server
-
-Start the development server on `http://localhost:3000`:
-
-```bash
-# npm
 npm run dev
-
-# pnpm
-pnpm run dev
-
-# yarn
-yarn dev
-
-# bun
-bun run dev
 ```
 
-## Production
+### Production
 
 Build the application for production:
 
 ```bash
-# npm
 npm run build
-
-# pnpm
-pnpm run build
-
-# yarn
-yarn build
-
-# bun
-bun run build
 ```
 
-Locally preview production build:
+Preview the production build:
 
 ```bash
-# npm
 npm run preview
-
-# pnpm
-pnpm run preview
-
-# yarn
-yarn preview
-
-# bun
-bun run preview
 ```
 
-Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
+## Project Structure
+
+*   **/components**: Reusable Vue.js components for the UI and the 3D scene.
+*   **/composables**: Reusable Vue Composition API functions.
+*   **/public**: Static assets, including audio files and images.
+*   **/server/api**: Server-side API endpoints.
+*   **/stores**: Pinia stores for state management.
+*   **app.vue**: The main entry point of the application.
+*   **nuxt.config.ts**: The configuration file for the Nuxt.js application.
+
+## Contributing
+
+Contributions are welcome! Please feel free to open an issue or submit a pull request.
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.

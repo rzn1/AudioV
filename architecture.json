@@ -1,0 +1,70 @@
+{
+  "projectName": "AudioV",
+  "description": "A Nuxt.js web application that functions as a smart audio player with 3D visualizations.",
+  "technologies": {
+    "framework": "Nuxt.js",
+    "language": "TypeScript",
+    "ui": "Vue.js",
+    "stateManagement": "Pinia",
+    "graphics": {
+      "library": "Three.js",
+      "abstraction": "TresJS"
+    },
+    "audio": {
+      "playback": "Howler.js",
+      "analysis": "Meyda.js",
+      "sequencing": "Web Audio API"
+    }
+  },
+  "architecture": {
+    "frontend": {
+      "framework": "Nuxt.js",
+      "entrypoint": "app.vue",
+      "components": [
+        {"name": "Start.vue", "description": "Initial screen to start the audio experience."},
+        {"name": "Sphere.vue", "description": "3D sphere component for visualization."},
+        {"name": "Plane.vue", "description": "3D plane component for visualization."},
+        {"name": "Waveform.vue", "description": "Component to visualize the audio waveform."},
+        {"name": "Overflow.vue", "description": "UI component, purpose not fully clear from name."}
+      ],
+      "stateManagement": {
+        "library": "Pinia",
+        "store": "stores/player.ts",
+        "description": "Manages the state of the audio player (current track, playback status, etc.)"
+      }
+    },
+    "audioProcessing": {
+      "description": "Handles loading, analysis, and playback of audio files.",
+      "pipeline": [
+        {"step": "Loading", "details": "Fetches audio files from /public/audio and decodes them."},
+        {"step": "Analysis", "library": "Meyda.js", "details": "Analyzes audio files to find start/end points using RMS."},
+        {"step": "Sequencing", "api": "Web Audio API", "details": "Schedules and crossfades tracks for continuous playback."}
+      ],
+      "composables": "composables/useAudioTransition.ts"
+    },
+    "backend": {
+      "description": "Server-side API endpoints.",
+      "routes": [
+        {
+          "path": "/api/spotify",
+          "file": "server/api/spotify.ts",
+          "description": "Interacts with the Spotify API for fetching data or authentication."
+        }
+      ]
+    },
+    "projectStructure": {
+      "directories": [
+        {"name": "components", "purpose": "Reusable Vue components."},
+        {"name": "composables", "purpose": "Reusable composition functions."},
+        {"name": "public", "purpose": "Static assets like images and audio files."},
+        {"name": "server/api", "purpose": "Server-side API routes."},
+        {"name": "stores", "purpose": "Pinia state management stores."}
+      ],
+      "keyFiles": [
+        {"name": "nuxt.config.ts", "purpose": "Nuxt.js configuration."},
+        {"name": "package.json", "purpose": "Project dependencies and scripts."},
+        {"name": "app.vue", "purpose": "Main application entry point."}
+      ]
+    }
+  }
+}
