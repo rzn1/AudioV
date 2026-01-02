@@ -1,14 +1,17 @@
 import { defineStore } from "pinia";
-import { analyze } from 'web-audio-beat-detector';
+import { markRaw } from "vue";
+// @ts-ignore
+import MusicTempo from 'music-tempo';
 import Meyda from "meyda";
 import type { CurrentTrack, Tracks } from "@/types/types";
 import { Audio, AudioAnalyser, AudioListener, AudioContext } from "three";
 import * as THREE from "three";
 
-var currentTrack: CurrentTrack = { index: -1, startTime: 0, duration: 0, bufferStart: 0, startPoint: 0, endPoint: 0, bpm: 0, rmsData: [] };
+
 
 var audioCtx: AudioContext | null = null;
-var audio: Audio | null = null;
+var masterGain: GainNode | null = null;
+var listener: AudioListener | null = null;
 
 export const usePlayerStore = defineStore("player", {
   state: () => ({
@@ -16,6 +19,18 @@ export const usePlayerStore = defineStore("player", {
     trackList: [] as File[],
     audioBuffers: [] as Tracks[],
     isStarted: false,
+
+    // Moved to state for reactivity
+    currentTrack: {
+      index: -1,
+      startTime: 0,
+      duration: 0,
+      bufferStart: 0,
+      startPoint: 0,
+      endPoint: 0,
+      bpm: 0,
+      rmsData: []
+    } as CurrentTrack,
 
     fadeDuration: 4,
     fadeOutDuration: 15,
@@ -35,31 +50,31 @@ export const usePlayerStore = defineStore("player", {
   actions: {
     init() {
       audioCtx = THREE.AudioContext.getContext();
-      //this.currentTrack = { index: -1, startTime: 0, duration: 0, bufferStart: 0, startPoint: 0, endPoint: 0, bpm: 0, rmsData: [] };
+      listener = new AudioListener();
+      masterGain = audioCtx.createGain();
+      masterGain.connect(listener.getInput());
 
-      const listener = new AudioListener();
-      audio = new Audio(listener);
-      this.analyser = new AudioAnalyser(audio, 256);
+      this.analyser = new THREE.AudioAnalyser(new THREE.Audio(listener), 256);
     },
     setFadeDuration(val: number) {
       this.fadeDuration = val;
     },
     setAudioVolume(volume: number) {
       this.audioVolume = volume;
-      if (audio) {
-        audio.gain.gain.setValueAtTime(volume, audio.context.currentTime);
+      if (masterGain) {
+        masterGain.gain.setValueAtTime(volume, masterGain.context.currentTime);
       }
     },
     updateCurrentTime(ctxTime: number) {
       this.currentTime = ctxTime;
     },
     setCurrentTrack(data: CurrentTrack) {
-      currentTrack = data;
+      this.currentTrack = data;
     },
     getProgress() {
       //if (!this.currentTrack.index) return 0;
-      const elapsed = this.currentTime - currentTrack.startTime;
-      return Math.min(Math.max(elapsed / currentTrack.duration, 0), 1);
+      const elapsed = this.currentTime - this.currentTrack.startTime;
+      return Math.min(Math.max(elapsed / this.currentTrack.duration, 0), 1);
     },
 
     async initTracks(tracks: File[]) {
@@ -79,8 +94,21 @@ export const usePlayerStore = defineStore("player", {
 
     async detectBPM(buffer: AudioBuffer): Promise<number> {
       try {
-        const tempo = await analyze(buffer, {});
-        return Math.round(tempo);
+        let audioData = [];
+        if (buffer.numberOfChannels == 2) {
+          const channel1 = buffer.getChannelData(0);
+          const channel2 = buffer.getChannelData(1);
+          for (var i = 0; i < channel1.length; i++) {
+            audioData[i] = (channel1[i] + channel2[i]) / 2;
+          }
+        } else {
+          audioData = Array.from(buffer.getChannelData(0));
+        }
+
+        const mt = new MusicTempo(audioData);
+        // console.log("BPM", mt.tempo);
+        // console.log("Beats", mt.beats);
+        return Math.round(parseFloat(mt.tempo));
       } catch (err) {
         console.error('BPM detection failed:', err);
         return 0;
@@ -130,7 +158,7 @@ export const usePlayerStore = defineStore("player", {
     },
 
     scheduleTrack(index: number, when: number) {
-      if (!audioCtx || !audio) {
+      if (!audioCtx || !masterGain) {
         throw new Error('Audio context not initialized');
       }
 
@@ -159,9 +187,7 @@ export const usePlayerStore = defineStore("player", {
 
       const gain = audioCtx.createGain();
       source.connect(gain);
-      gain.connect(audio.gain);
-
-      audio.setNodeSource(source);
+      gain.connect(masterGain);
 
       source.start(when, startPoint);
       source.stop(when + playDuration);
@@ -184,27 +210,35 @@ export const usePlayerStore = defineStore("player", {
         bpm: trackData.bpm,
         startPoint: trackData.startPoint,
         endPoint: trackData.endPoint,
-        rmsData: trackData.rmsValues
+        rmsData: markRaw(trackData.rmsValues)
       });
 
-      const nextStartTime = trackData.startTime + (trackData.playDuration - this.fadeDuration);
+      const nextStartTime = trackData.startTime + (trackData.playDuration - this.fadeOutDuration);
 
       const nextTrack = this.scheduleTrack(nextIndex, nextStartTime);
 
       // crossfade
       nextTrack.gain.gain.linearRampToValueAtTime(0, nextStartTime); // ensure silence until start
-      nextTrack.gain.gain.linearRampToValueAtTime(this.audioVolume, nextStartTime + this.fadeDuration);
+      nextTrack.gain.gain.linearRampToValueAtTime(1, nextStartTime + this.fadeDuration);
 
-      trackData.gain.gain.setValueAtTime(this.audioVolume, nextStartTime); // hold volume until next starts
-      trackData.gain.gain.linearRampToValueAtTime(0, nextStartTime + this.fadeDuration);
+      trackData.gain.gain.setValueAtTime(1, nextStartTime); // hold volume until next starts
+      trackData.gain.gain.linearRampToValueAtTime(0, nextStartTime + this.fadeOutDuration);
 
       let playbackRate = 1;
+      // Calculate ratio: Target (Next) / Current
+      // If Next is 128 and Current is 120, ratio is 1.06. Current needs to speed up to 1.06x.
       playbackRate = nextTrack.bpm / trackData.bpm;
-      console.log(`Adjusting playback rate from ${trackData.bpm} BPM to ${nextTrack.bpm} BPM (rate: ${playbackRate.toFixed(3)})`);
-      trackData.source.playbackRate.setValueAtTime(1, nextStartTime);
-      trackData.source.playbackRate.linearRampToValueAtTime(playbackRate, nextStartTime);
 
-      const msUntilNextQueue = (trackData.playDuration - this.fadeDuration) * 1000;
+      console.log(`Adjusting Outgoing Track (index ${index}) rate from 1.0 to ${playbackRate.toFixed(3)} to match Incoming Track (index ${nextIndex}, BPM ${nextTrack.bpm})`);
+
+      // Ramp the CURRENT track's rate to match the NEXT track's BPM
+      trackData.source.playbackRate.setValueAtTime(1, nextStartTime);
+      trackData.source.playbackRate.linearRampToValueAtTime(playbackRate, nextStartTime + this.fadeOutDuration);
+
+      // Incoming track plays at its native speed (1.0)
+      nextTrack.source.playbackRate.setValueAtTime(1, nextStartTime);
+
+      const msUntilNextQueue = (trackData.playDuration - this.fadeOutDuration) * 1000;
 
       setTimeout(() => {
         this.queueNext(nextIndex, nextTrack);
@@ -230,7 +264,7 @@ export const usePlayerStore = defineStore("player", {
     },
 
     getTrackData(): CurrentTrack {
-      return currentTrack;
+      return this.currentTrack;
     },
 
     getAudioContext(): AudioContext | null {

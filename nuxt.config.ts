@@ -1,4 +1,3 @@
-// https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   modules: ['@tresjs/nuxt', '@pinia/nuxt', '@nuxt/ui'],
   css: ['~/assets/css/main.css'],
@@ -12,7 +11,7 @@ export default defineNuxtConfig({
     }
   },
 
-  tres:{
+  tres: {
     devtools: true,
   }
 })

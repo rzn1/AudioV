@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, onMounted, computed, watch } from "vue";
 import { usePlayerStore } from "~/stores/player";
 
 const player = usePlayerStore();
-const currentTrack = computed(() => player.getTrackData());
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const waveform = ref<number[]>([]);
 const trackProgress = computed(() => player.getProgress());
@@ -81,19 +80,21 @@ function chunkRMSData(rmsData: number[], chunkCount: number): number[] {
 }
 
 onMounted(async () => {
-  waveform.value = currentTrack.value.rmsData.length ? chunkRMSData(currentTrack.value.rmsData, 300) : [];
+  waveform.value = player.currentTrack.rmsData.length ? chunkRMSData(player.currentTrack.rmsData, 300) : [];
   drawWaveform(waveform.value, trackProgress.value);
   animate();
 
   watch(
-    () => currentTrack.value.rmsData,
-    (newRmsData) => {
-      console.log("RMS data changed, updating waveform");
-      waveform.value = newRmsData.length
-        ? chunkRMSData(currentTrack.value.rmsData, 300)
+    () => player.currentTrack.index,
+    (newIndex) => {
+      console.log(`Track changed to ${newIndex}, updating waveform`);
+      // Force update from the store
+      const newData = player.currentTrack.rmsData; 
+      waveform.value = newData.length
+        ? chunkRMSData(newData, 300)
         : [];
-    },
-    { deep: true }
+      drawWaveform(waveform.value, trackProgress.value);
+    }
   );
 });
 
