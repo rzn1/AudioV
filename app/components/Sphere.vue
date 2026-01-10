@@ -180,11 +180,23 @@ const dot = new Points(geometry, material);
 dot.renderOrder = 1;
 
 watch(() => props.uniforms.u_color_a.value, (newValue) => {
+  console.log("Sphere Color A update:", newValue);
   material.uniforms.u_color_a.value = new Color(newValue);
 });
 
 watch(() => props.uniforms.u_color_b.value, (newValue) => {
+  console.log("Sphere Color B update:", newValue);
   material.uniforms.u_color_b.value = new Color(newValue);
+});
+
+watch(() => props.uniforms.u_speed.value, (newValue) => {
+  material.uniforms.u_speed.value = newValue;
+});
+
+watch(() => props.uniforms.u_intensity.value, (newValue) => {
+  // We might want to handle intensity differently if app.vue drives it
+  // But strictly binding it here ensures manual updates work if app.vue is idle
+  material.uniforms.u_intensity.value = newValue;
 });
 
 </script>
