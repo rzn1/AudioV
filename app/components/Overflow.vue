@@ -178,7 +178,7 @@
                             </div>
 
                             <!-- Track List -->
-                            <div class="flex-1 overflow-y-auto min-h-[300px] pr-1 mt-4 custom-scrollbar relative">
+                            <div class="w-full h-[350px] overflow-y-auto pr-1 mt-4 custom-scrollbar relative">
                                 <!-- Empty State -->
                                 <div v-if="player.trackList.length === 0" class="absolute inset-0 flex flex-col items-center justify-center text-gray-600 space-y-2 opacity-50">
                                     <span class="i-heroicons-musical-note-20-solid text-4xl"></span>

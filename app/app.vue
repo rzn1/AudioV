@@ -55,6 +55,7 @@ onMounted(async () => {
           
           // Apply to uniforms
           uniforms.value.u_color_a.value = '#' + currentColorA.getHexString();
+          uniforms.value.u_color_b.value = '#' + currentColorB.getHexString();
           // Speed - Static (User requested)
           // uniforms.value.u_speed.value = lerp(uniforms.value.u_speed.value, vibe.speed, lerpSpeed);
       }

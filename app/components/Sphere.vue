@@ -176,6 +176,10 @@ uniform float u_high;
     color += color * (u_high * 2.5);
     
     color = mix(vec3(0.0), color, strength);
+    
+    // Clamp to prevent weird bloom artifacts
+    color = clamp(color, 0.0, 1.0);
+    
     gl_FragColor = vec4(color, 1.0);
   }
 `
