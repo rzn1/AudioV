@@ -9,6 +9,7 @@ import * as THREE from "three";
 
 var audioCtx: AudioContext | null = null;
 var masterGain: GainNode | null = null;
+var mixBus: GainNode | null = null;
 var listener: AudioListener | null = null;
 
 export const usePlayerStore = defineStore("player", {
@@ -56,7 +57,9 @@ export const usePlayerStore = defineStore("player", {
       u_intensity: { value: 0.15 },
       u_partical_size: { value: 265 },
       u_color_a: { value: "#3f3089" },
-      u_color_b: { value: "#00bcff" }
+      u_color_b: { value: "#00bcff" },
+      u_bass: { value: 0.0 },
+      u_high: { value: 0.0 }
     }
   }),
 
@@ -67,17 +70,23 @@ export const usePlayerStore = defineStore("player", {
       masterGain = audioCtx.createGain();
       masterGain.connect(listener.getInput());
 
-      // Create Analyser but ignore the dummy input
+      // Create MixBus (Pre-Fader)
+      mixBus = audioCtx.createGain();
+
+      // Route MixBus to MasterGain (Volume Control)
+      mixBus.connect(masterGain);
+
+      // Create Analyser
       this.analyser = new THREE.AudioAnalyser(new THREE.Audio(listener), 256);
 
-      // Explicitly connect our master bus to the analyser node
-      masterGain.connect(this.analyser.analyser);
+      // Connect MixBus to Analyser (Visuals independent of Volume)
+      mixBus.connect(this.analyser.analyser);
 
       this.initEqualizer();
     },
 
     initEqualizer() {
-      if (!audioCtx || !masterGain) return;
+      if (!audioCtx || !mixBus) return;
 
       // 7-band EQ: 60, 150, 400, 1k, 2.4k, 6k, 15k
       const frequencies = [60, 150, 400, 1000, 2400, 6000, 15000];
@@ -102,8 +111,8 @@ export const usePlayerStore = defineStore("player", {
         this.eqNodes.push(filter);
       });
 
-      // Connect last filter to masterGain
-      previousNode.connect(masterGain);
+      // Connect last filter to MixBus (Pre-Fader)
+      previousNode.connect(mixBus);
     },
 
     setEqGain(index: number, val: number) {
@@ -153,25 +162,39 @@ export const usePlayerStore = defineStore("player", {
     },
 
     getLowEnergy() {
-      if (!this.analyser) return 0;
+      // Deprecated, use getFrequencyData().bass instead
+      const data = this.getFrequencyData();
+      return data.bass * 255;
+    },
+
+    getFrequencyData() {
+      if (!this.analyser) return { bass: 0, mid: 0, high: 0 };
       const data = this.analyser.getFrequencyData();
-      // data has 128 bins (for 256 fftSize). 44100Hz / 256 ~= 172Hz per bin.
-      // wait, bin width = sampleRate / fftSize. 44100 / 256 = 172Hz.
-      // So bin 0 is 0-172Hz. That's basically all the bass.
-      // Let's use getData() which returns Uint8Array. 
-      // 128 bins.
 
-      // Let's check init: new AudioAnalyser(..., 256) -> fftSize 256. frequencyBinCount = 128.
-      // Bin size = 44100/256 = 172 Hz.
-      // Lower bins focus on bass.
-      // Let's average the first 3 bins (~0-500Hz) for "Punch".
+      // FFT Size 256 -> 128 bins. SampleRate 44100.
+      // Bin width ~172 Hz.
 
-      let sum = 0;
-      // Looking at first 3 bins
-      for (let i = 0; i < 3; i++) {
-        sum += data[i];
-      }
-      return sum / 3; // 0-255 range
+      let bass = 0;
+      let mid = 0;
+      let high = 0;
+
+      // Bass: ~0 - 860 Hz (Bins 0-4)
+      for (let i = 0; i < 5; i++) bass += data[i];
+      bass /= 5;
+
+      // Mid: ~860 - 5000 Hz (Bins 5-29)
+      for (let i = 5; i < 30; i++) mid += data[i];
+      mid /= 25;
+
+      // High: ~5k - 22k Hz (Bins 30-127)
+      for (let i = 30; i < 128; i++) high += data[i];
+      high /= 98;
+
+      return {
+        bass: bass / 255,
+        mid: mid / 255,
+        high: high / 255
+      };
     },
 
     async initTracks(tracks: File[]) {

@@ -22,29 +22,13 @@ const props = defineProps({
       },
       u_color_b: {
         value: "#00bcff"
-      }
+      },
+      u_bass: { value: 0.0 },
+      u_high: { value: 0.0 }
     }
   }
 });
 
-
-const fragmentShader = `
-uniform float u_time;
-  uniform vec3 u_color_a;
-  uniform vec3 u_color_b;
-  varying vec2 v_uv;
-  varying float v_displacement;
-
-  void main() {
-    float strength = distance(gl_PointCoord, vec2(0.5));
-    strength = step(0.5, strength);
-    strength = 1.0 - strength;
-
-    vec3 color = mix(u_color_a, u_color_b, v_displacement);
-    color = mix(vec3(0.0), color, strength);
-    gl_FragColor = vec4(color, 1.0);
-  }
-`
 
 const vertexShader = `
 vec3 mod289(vec3 x)
@@ -144,6 +128,8 @@ vec3 mod289(vec3 x)
   uniform float u_time;
   uniform float u_speed;
   uniform float u_intensity;
+  uniform float u_bass;
+  uniform float u_high;
   uniform float u_partical_size;
   uniform vec3 u_color_a;
   varying vec2 v_uv;
@@ -152,7 +138,11 @@ vec3 mod289(vec3 x)
   void main() {
     v_uv = uv;
     v_displacement = cnoise(position + vec3(u_time * u_speed));
-    v_displacement = v_displacement * u_intensity;
+    
+    // Bass drives the displacement amplitude significantly
+    float distort = u_intensity + (u_bass * 0.2);
+    
+    v_displacement = v_displacement * distort;
     vec3 pos = position + (v_displacement);
     vec4 modelPosition = modelMatrix * vec4(pos, 1.0);
     vec4 viewPosition = viewMatrix * modelPosition;
@@ -160,6 +150,29 @@ vec3 mod289(vec3 x)
 
     gl_Position = projectedPosition;
     gl_PointSize = u_partical_size * (1.0 / - viewPosition.z);
+  }
+`
+
+const fragmentShader = `
+uniform float u_time;
+uniform float u_high;
+  uniform vec3 u_color_a;
+  uniform vec3 u_color_b;
+  varying vec2 v_uv;
+  varying float v_displacement;
+
+  void main() {
+    float strength = distance(gl_PointCoord, vec2(0.5));
+    strength = step(0.5, strength);
+    strength = 1.0 - strength;
+
+    vec3 color = mix(u_color_a, u_color_b, v_displacement);
+    
+    // Highs add a white/bright tint
+    color = mix(color, vec3(1.0), u_high * 0.5);
+    
+    color = mix(vec3(0.0), color, strength);
+    gl_FragColor = vec4(color, 1.0);
   }
 `
 
@@ -197,6 +210,15 @@ watch(() => props.uniforms.u_intensity.value, (newValue) => {
   // We might want to handle intensity differently if app.vue drives it
   // But strictly binding it here ensures manual updates work if app.vue is idle
   material.uniforms.u_intensity.value = newValue;
+});
+
+
+watch(() => props.uniforms.u_bass.value, (newValue) => {
+  material.uniforms.u_bass.value = newValue;
+});
+
+watch(() => props.uniforms.u_high.value, (newValue) => {
+  material.uniforms.u_high.value = newValue;
 });
 
 </script>

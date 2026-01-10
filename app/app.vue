@@ -61,14 +61,16 @@ onMounted(async () => {
           uniforms.value.u_speed.value = lerp(uniforms.value.u_speed.value, vibe.speed, lerpSpeed);
       }
       
-      // Intensity (Fixed Base) - Always Reactive
-      const baseIntensity = 0.15;
       
-      // Get Average Frequency (Smoother, "Liquid" feel)
-      const avg = player.analyser.getAverageFrequency();
+      // Get Bounded Frequency Data
+      const { bass, mid, high } = player.getFrequencyData();
       
-      // Scale it
-      uniforms.value.u_intensity.value = (avg / 100) * (baseIntensity * 2.0);
+      // Drive Uniforms
+      uniforms.value.u_bass.value = bass; // 0-1
+      uniforms.value.u_high.value = high; // 0-1
+      
+      // Base Intensity + Mid Energy (Reduced scaling)
+      uniforms.value.u_intensity.value = 0.1 + (mid * 0.25);
 
       uniforms.value.u_time.value = clock.getElapsedTime();
     }
