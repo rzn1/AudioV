@@ -139,12 +139,15 @@ vec3 mod289(vec3 x)
     v_uv = uv;
     v_displacement = cnoise(position + vec3(u_time * u_speed));
     
-    // Bass drives the displacement amplitude significantly
-    float distort = u_intensity + (u_bass * 0.2);
+    // Use intensity + bass for punch
+    float distort = u_intensity + (u_bass * 0.5);
     
     v_displacement = v_displacement * distort;
-    vec3 pos = position + (v_displacement);
-    vec4 modelPosition = modelMatrix * vec4(pos, 1.0);
+    
+    // Fix: Displace along the normal (radial direction)
+    // Since it's a sphere centered at 0, normalize(position) gives the normal.
+    vec3 newPos = position + (normalize(position) * v_displacement);
+    vec4 modelPosition = modelMatrix * vec4(newPos, 1.0);
     vec4 viewPosition = viewMatrix * modelPosition;
     vec4 projectedPosition = projectionMatrix * viewPosition;
 
@@ -168,8 +171,9 @@ uniform float u_high;
 
     vec3 color = mix(u_color_a, u_color_b, v_displacement);
     
-    // Highs add a white/bright tint
-    color = mix(color, vec3(1.0), u_high * 0.5);
+    // Highs boost the brightness of the EXISTING color (preserving hue)
+    // instead of washing it out with white
+    color += color * (u_high * 2.5);
     
     color = mix(vec3(0.0), color, strength);
     gl_FragColor = vec4(color, 1.0);

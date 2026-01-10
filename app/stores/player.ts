@@ -42,6 +42,7 @@ export const usePlayerStore = defineStore("player", {
 
     currentTime: 0,
     isVibeAuto: true,
+    isFlashEnabled: true,
     transitionState: {
       active: false,
       fromName: "" as string
@@ -178,19 +179,21 @@ export const usePlayerStore = defineStore("player", {
       let mid = 0;
       let high = 0;
 
-      // Bass: ~0 - 860 Hz (Bins 0-4)
-      for (let i = 0; i < 5; i++) bass += data[i];
-      bass /= 5;
+      // Bass: Focus on sub/kick (Bins 0-2 ~0-500Hz)
+      // We want the average of the loudest parts
+      for (let i = 0; i < 3; i++) bass += data[i];
+      bass /= 3;
 
-      // Mid: ~860 - 5000 Hz (Bins 5-29)
-      for (let i = 5; i < 30; i++) mid += data[i];
-      mid /= 25;
+      // Mid: Vocals/Snare (Bins 3-20 ~500-3.5k)
+      for (let i = 3; i < 20; i++) mid += data[i];
+      mid /= 17;
 
-      // High: ~5k - 22k Hz (Bins 30-127)
-      for (let i = 30; i < 128; i++) high += data[i];
-      high /= 98;
+      // High: Hats/Air (Bins 20-100)
+      for (let i = 20; i < 100; i++) high += data[i];
+      high /= 80;
 
       return {
+        // Normalize 0-255 to 0-1
         bass: bass / 255,
         mid: mid / 255,
         high: high / 255

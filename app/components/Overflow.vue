@@ -77,11 +77,21 @@
                                     <span class="text-[10px] uppercase tracking-wider font-bold text-gray-500">Visuals</span>
                                     <USwitch v-model="player.isVibeAuto" color="primary" size="xs" />
                                 </div>
-                                <div class="space-y-2">
+                                <div class="space-y-3">
                                     <!-- Speed Control -->
-                                     <div class="flex items-center gap-2 text-xs text-gray-400">
-                                        <span class="i-heroicons-bolt-20-solid"></span>
-                                        <USlider :min="0" :max="2" :step="0.1" v-model="uniforms.u_speed.value" size="xs" class="flex-1" />
+                                     <UFormField label="Speed">
+                                        <USlider :min="0" :max="2" :step="0.1" v-model="uniforms.u_speed.value" size="xs" />
+                                     </UFormField>
+                                     
+                                     <!-- Particle Size -->
+                                     <UFormField label="Particles">
+                                        <USlider :min="50" :max="500" :step="10" v-model="uniforms.u_partical_size.value" size="xs" />
+                                     </UFormField>
+
+                                     <!-- Toggles -->
+                                     <div class="flex justify-between items-center">
+                                        <span class="text-xs text-gray-400">Flash</span>
+                                        <USwitch v-model="player.isFlashEnabled" color="primary" size="xs" />
                                      </div>
                                      
                                      <!-- Color Picker -->

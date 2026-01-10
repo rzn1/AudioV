@@ -55,22 +55,24 @@ onMounted(async () => {
           
           // Apply to uniforms
           uniforms.value.u_color_a.value = '#' + currentColorA.getHexString();
-          uniforms.value.u_color_b.value = '#' + currentColorB.getHexString();
-          
-          // Speed
-          uniforms.value.u_speed.value = lerp(uniforms.value.u_speed.value, vibe.speed, lerpSpeed);
+          // Speed - Static (User requested)
+          // uniforms.value.u_speed.value = lerp(uniforms.value.u_speed.value, vibe.speed, lerpSpeed);
       }
       
       
+      
       // Get Bounded Frequency Data
-      const { bass, mid, high } = player.getFrequencyData();
+      const { bass, high } = player.getFrequencyData();
+      const avg = player.analyser.getAverageFrequency();
+      
       
       // Drive Uniforms
-      uniforms.value.u_bass.value = bass; // 0-1
-      uniforms.value.u_high.value = high; // 0-1
+      // Squared bass for punch, scaled for new shader math
+      uniforms.value.u_bass.value = bass * bass; 
+      uniforms.value.u_high.value = player.isFlashEnabled ? high : 0; // Flash toggle
       
-      // Base Intensity + Mid Energy (Reduced scaling)
-      uniforms.value.u_intensity.value = 0.1 + (mid * 0.25);
+      // Use Average Frequency for smooth "liquid" waves
+      uniforms.value.u_intensity.value = (avg / 255) * 0.5;
 
       uniforms.value.u_time.value = clock.getElapsedTime();
     }
