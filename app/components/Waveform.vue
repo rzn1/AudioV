@@ -89,7 +89,7 @@ function drawWaveform(rmsValues: number[], progress = 0) {
 
   // Draw Markers (Subtle)
   const track = player.currentTrack;
-  if (track.fileDuration > 0) {
+  if (track.fileDuration && track.fileDuration > 0) {
       const drawMarker = (time: number, color: string) => {
           const ratio = time / track.fileDuration;
           const x = ratio * width;
@@ -103,6 +103,26 @@ function drawWaveform(rmsValues: number[], progress = 0) {
       };
       
       if (track.startPoint) drawMarker(track.startPoint, '#bef264'); // Lime-300
+      
+      // Mix-Out Marker (Transition Start)
+      const fadeOut = player.fadeOutDuration || 3;
+      if (track.endPoint && track.endPoint > fadeOut) {
+          const mixOutPoint = track.endPoint - fadeOut;
+          
+          const ratio = mixOutPoint / track.fileDuration;
+          const x = ratio * width;
+          
+          ctx.save();
+          ctx.strokeStyle = '#f87171'; // Red-400 (Same as end, indicating relation)
+          ctx.lineWidth = 1;
+          ctx.setLineDash([2, 2]); // Dashed
+          ctx.beginPath();
+          ctx.moveTo(x, height * 0.3);
+          ctx.lineTo(x, height * 0.7);
+          ctx.stroke();
+          ctx.restore();
+      }
+
       if (track.endPoint) drawMarker(track.endPoint, '#f87171');   // Red-400
   }
 }

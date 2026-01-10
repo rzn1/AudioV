@@ -169,7 +169,7 @@ uniform float u_high;
     strength = step(0.5, strength);
     strength = 1.0 - strength;
 
-    vec3 color = mix(u_color_a, u_color_b, v_displacement);
+    vec3 color = mix(u_color_a, u_color_b, clamp(v_displacement, 0.0, 1.0));
     
     // Highs boost the brightness of the EXISTING color (preserving hue)
     // instead of washing it out with white
