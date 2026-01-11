@@ -91,10 +91,15 @@ onMounted(async () => {
 
     <TresCanvas window-size :antialias="true" :alpha="true" :transparent="false" clearColor="#000000"
       :output-encoding="SRGBColorSpace">
-      <TresPerspectiveCamera :position="cameraPosition" :fov="20" />
+      <TresPerspectiveCamera make-default :position="cameraPosition" :fov="20" />
       <OrbitControls :autoRotate="true" :autoRotateSpeed="0.03" :enableZoom="false" :enablePan="false"
         :minPolarAngle="Math.PI / 2" :maxPolarAngle="Math.PI / 2" />
       <Sphere :uniforms="uniforms" />
+      <TrackTitle 
+        :key="`${player.trackList[player.currentTrack.index]?.name || 'empty'}-${player.currentTrack.index}`"
+        :text="(player.trackList[player.currentTrack.index]?.name.replace(/\.[^/.]+$/, '') || '').toUpperCase()" 
+        :visible="(player.currentTime - player.currentTrack.startTime) < 8"
+      />
       <Plane :intensity="scaleValue(bloomIntensity, 0, 250, 0, 4)" />
     </TresCanvas>
   </UApp>
