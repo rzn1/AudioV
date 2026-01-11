@@ -207,10 +207,12 @@ export const usePlayerStore = defineStore("player", {
       this.processingState.total = tracks.length;
       this.processingState.current = 0;
 
-      // Instantiate worker
-      // @ts-ignore
-      const WorkerClass = await import('@/workers/audio.worker?worker');
-      const worker = new WorkerClass.default();
+      if (!process.client) return;
+
+      // Instantiate worker using standard Vite syntax
+      const worker = new Worker(new URL('../workers/audio.worker.ts', import.meta.url), {
+        type: 'module'
+      });
 
       for (const res of tracks) {
         this.processingState.current++;
