@@ -1,258 +1,372 @@
 <template>
-    <div class="absolute inset-0 h-fit z-10 p-5">
-        <UDrawer handle-only title="Player controller" description="Lorem ipsum dolor sit amet, consectetur adipiscing elit." inset>
-            <UButton label="Open" color="neutral" variant="subtle" trailing-icon="i-lucide-chevron-up" />
+    <div class="absolute inset-0 h-fit z-10 p-4 sm:p-6 pointer-events-none">
+        <UDrawer 
+            handle-only 
+            title="AUDIO CONTROL" 
+            description="Manage playback, visuals and queue." 
+            inset
+            :ui="{ 
+                content: 'bg-gray-950/80 backdrop-blur-xl border-t border-white/10 ring-1 ring-white/5',
+                header: 'hidden', 
+                body: 'p-0 sm:p-0',
+                handle: 'bg-white/20 hover:bg-white/40 w-16 h-1.5 mt-2'
+            }"
+            class="pointer-events-auto"
+        >
+            <div class="flex justify-center w-full pb-2 pt-1">
+                 <UButton 
+                    label="CONTROLS" 
+                    color="neutral" 
+                    variant="ghost" 
+                    size="xs" 
+                    class="font-mono tracking-widest text-gray-500 hover:text-white"
+                    trailing-icon="i-lucide-chevron-up" 
+                 />
+            </div>
 
             <template #body>
-                <div class="w-full flex gap-10">
-                    <!-- LEFT COLUMN: Controls & Settings -->
-                    <div class="w-full h-full flex flex-col gap-4">
-                        
-                        <!-- CARD 1: Now Playing & Volume -->
-                        <div class="bg-gray-900/40 border border-white/5 rounded-xl p-4 backdrop-blur-sm">
-                            <div class="flex justify-between items-start mb-4">
-                                <div class="flex flex-col gap-1 min-w-0">
-                                    <Transition name="fade" mode="out-in">
-                                        <span v-if="player.transitionState.active" class="text-[10px] uppercase tracking-wider font-bold text-primary-400 animate-pulse truncate block" key="mixing">
-                                            Mixing from {{ player.transitionState.fromName }}
-                                        </span>
-                                        <span v-else class="text-[10px] uppercase tracking-wider font-bold text-gray-500 block" key="default">
-                                            Now Playing
-                                        </span>
-                                    </Transition>
-                                    <h3 class="text-white font-medium truncate max-w-[200px]" :title="player.trackList[player.currentTrack.index]?.name">
-                                        {{ player.currentTrack.index !== -1 && player.trackList[player.currentTrack.index] ? player.trackList[player.currentTrack.index].name.replace(/\.[^/.]+$/, "") : 'No Track Selected' }}
-                                    </h3>
-                                </div>
-                                <div class="flex gap-2">
-                                     <UBadge color="neutral" variant="soft" size="xs" class="font-mono">{{ currentTrack.bpm }} BPM</UBadge>
-                                     <UBadge :color="currentTrack.duration > 0 ? 'primary' : 'neutral'" variant="soft" size="xs" class="font-mono">
-                                        {{ formatTime(currentTrack.duration) }}
-                                     </UBadge>
-                                </div>
-                            </div>
-
-                            <div class="grid grid-cols-[1fr_auto] gap-4 items-center">
-                                <UFormField label="Volume" class="w-full">
-                                    <USlider :min="0" :max="1" :step="0.01" v-model="volume" size="sm" />
-                                </UFormField>
-                                <UPopover :ui="{ content: 'w-auto' }">
-                                    <UButton icon="i-heroicons-adjustments-horizontal" color="neutral" variant="ghost" size="sm" />
-                                    <template #content>
-                                        <!-- Mini EQ -->
-                                        <div class="p-4 flex gap-3">
-                                            <div v-for="(freq, index) in [60, 400, 2400, 15000]" :key="freq" class="flex flex-col items-center gap-1">
-                                                <span class="text-[8px] uppercase font-bold text-gray-500 mb-1">{{ ['Bass', 'Lo-Mid', 'Hi-Mid', 'Air'][index] }}</span>
-                                                <div class="h-24 flex items-center justify-center">
-                                                    <USlider orientation="vertical" :min="-12" :max="12" :step="0.1" 
-                                                        :model-value="player.eqNodes[[0, 2, 4, 6][index]]?.gain.value || 0"
-                                                        @update:model-value="(val) => player.setEqGain([0, 2, 4, 6][index], val)" size="xs" color="neutral" />
-                                                </div>
-                                                <span class="text-[9px] text-gray-500 font-mono">{{ freq >= 1000 ? (freq/1000) + 'k' : freq }}</span>
-                                            </div>
-                                        </div>
-                                    </template>
-                                </UPopover>
-                            </div>
-                        </div>
-
-                        <!-- CARD 2: Visuals & Mixer -->
-                        <div class="grid grid-cols-2 gap-4">
-                            <!-- Mixer -->
-                            <div class="bg-gray-900/40 border border-white/5 rounded-xl p-4 backdrop-blur-sm flex flex-col gap-3">
-                                <span class="text-[10px] uppercase tracking-wider font-bold text-gray-500">Automix</span>
-                                <div class="space-y-3">
-                                    <UFormField label="Fade In (s)">
-                                        <UInputNumber v-model="player.fadeDuration" size="xs" :min="0" :max="30" />
-                                    </UFormField>
-                                    <UFormField label="Fade Out (s)">
-                                        <UInputNumber v-model="player.fadeOutDuration" size="xs" :min="0" :max="30" />
-                                    </UFormField>
-                                </div>
-                            </div>
-
-                            <!-- Sphere -->
-                            <div class="bg-gray-900/40 border border-white/5 rounded-xl p-4 backdrop-blur-sm flex flex-col gap-3">
-                                <div class="flex justify-between items-center">
-                                    <span class="text-[10px] uppercase tracking-wider font-bold text-gray-500">Visuals</span>
-                                    <USwitch v-model="player.isVibeAuto" color="primary" size="xs" />
-                                </div>
-                                <div class="space-y-3">
-                                    <!-- Speed Control -->
-                                     <UFormField label="Speed">
-                                        <USlider :min="0" :max="2" :step="0.1" v-model="uniforms.u_speed.value" size="xs" />
-                                     </UFormField>
-                                     
-                                     <!-- Particle Size -->
-                                     <UFormField label="Particles">
-                                        <USlider :min="50" :max="500" :step="10" v-model="uniforms.u_partical_size.value" size="xs" />
-                                     </UFormField>
-
-                                     <!-- Toggles -->
-                                     <div class="flex justify-between items-center">
-                                        <span class="text-xs text-gray-400">Flash</span>
-                                        <USwitch v-model="player.isFlashEnabled" color="primary" size="xs" />
-                                     </div>
-                                     
-                                     <!-- Color Picker -->
-                                     <UPopover>
-                                        <UButton label="Colors" color="neutral" variant="soft" size="xs" block>
-                                            <template #trailing>
-                                                <div class="flex -space-x-1">
-                                                    <span :style="primaryChip" class="size-2 rounded-full ring-1 ring-gray-900" />
-                                                    <span :style="secondaryChip" class="size-2 rounded-full ring-1 ring-gray-900" />
-                                                </div>
-                                            </template>
-                                        </UButton>
-                                        <template #content>
-                                            <div class="flex gap-2 p-2 bg-gray-900">
-                                                <UColorPicker v-model="uniforms.u_color_a.value" class="p-1" />
-                                                <UColorPicker v-model="uniforms.u_color_b.value" class="p-1" />
-                                            </div>
-                                        </template>
-                                    </UPopover>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- CARD 3: Waveform -->
-                        <div class="flex-1 bg-gray-900/40 border border-white/5 rounded-xl p-4 backdrop-blur-sm flex flex-col min-h-0">
-                            <div class="flex justify-between items-center mb-2">
-                                <span class="text-[10px] uppercase tracking-wider font-bold text-gray-500">Waveform Analysis</span>
-                                 <UPopover :ui="{ content: 'w-auto' }">
-                                    <UButton icon="i-heroicons-chart-bar" color="neutral" variant="ghost" size="sm" />
-                                    <template #content>
-                                        <div class="p-4 w-56 bg-gray-900 text-[10px] font-mono text-gray-400">
-                                            <div class="grid grid-cols-2 gap-y-1">
-                                                <span>VIBE:</span> <span class="text-white">{{ player.currentTrack.vibe?.name || '--' }}</span>
-                                                <span>ENERGY:</span> <span class="text-white">{{ player.currentTrack.vibe?.intensity?.toFixed(2) || '0.00' }}</span>
-                                                <div class="col-span-2 h-px bg-gray-800 my-1"></div>
-                                                <span>BASS:</span> <span class="text-yellow-400">{{ player.getLowEnergy().toFixed(0) }}</span>
-                                            </div>
-                                        </div>
-                                    </template>
-                                </UPopover>
-                            </div>
+                <div class="w-full h-[85vh] sm:h-auto overflow-y-auto sm:overflow-visible bg-gray-950/90 sm:bg-transparent">
+                    <div class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+                        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
                             
-                            <div class="w-full h-24 flex items-center justify-center relative">
-                                <div class="absolute inset-0">
-                                     <Waveform />
-                                </div>
-                            </div>
-                            
-                            <!-- Seek Bar Below -->
-                            <div class="mt-2">
-                                <URange v-if="player.currentTrack.duration > 0" v-model="seekProgress" :min="0" :max="100" :step="0.1" size="xs" color="primary" />
-                                <UProgress v-else :value="0" size="xs" />
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- RIGHT COLUMN: Queue -->
-                    <div class="w-full border-l border-gray-800 pl-6 flex flex-col h-full">
-                        <p class="font-bold text-md mb-3">Queue</p>
-                        
-                        <div class="flex-1 flex flex-col space-y-4">
-                            <!-- Custom Upload Area -->
-                            <div class="relative group">
-                                <label class="flex flex-col items-center justify-center w-full h-24 border-2 border-gray-700 border-dashed rounded-lg cursor-pointer bg-gray-900/50 hover:bg-gray-800 transition-colors">
-                                    <div class="flex flex-col items-center justify-center pt-5 pb-6">
-                                        <span class="i-heroicons-cloud-arrow-up-20-solid text-gray-400 mb-2 text-2xl"></span>
-                                        <p class="mb-1 text-sm text-gray-400"><span class="font-semibold">Click to upload</span> or drag and drop</p>
-                                        <p class="text-xs text-gray-500">MP3, WAV, OGG (Max 100MB)</p>
-                                    </div>
-                                    <input type="file" class="hidden" multiple accept="audio/*" @change="onNativeFileChange" />
-                                </label>
+                            <!-- LEFT COLUMN: Main Controls -->
+                            <div class="lg:col-span-7 xl:col-span-8 flex flex-col gap-6">
                                 
-                                <!-- Progress Overlay -->
-                                <div v-if="player.processingState.isProcessing" class="absolute inset-0 bg-gray-900/90 backdrop-blur-sm rounded-lg flex flex-col items-center justify-center z-10 transition-all">
-                                    <div class="text-blue-400 font-mono text-xs flex items-center gap-2 mb-2">
-                                        <span class="i-heroicons-sparkles-20-solid animate-pulse"></span>
-                                        Analyzing Vibe Data...
-                                    </div>
-                                    <div class="w-3/4">
-                                         <UProgress :value="(player.processingState.current / player.processingState.total) * 100" size="sm" color="primary" indicator />
-                                         <div class="text-center text-[10px] text-gray-500 mt-1">{{ player.processingState.current }} / {{ player.processingState.total }}</div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Track List -->
-                            <div class="w-full h-[350px] overflow-y-auto pr-1 mt-4 custom-scrollbar relative">
-                                <!-- Empty State -->
-                                <div v-if="player.trackList.length === 0" class="absolute inset-0 flex flex-col items-center justify-center text-gray-600 space-y-2 opacity-50">
-                                    <span class="i-heroicons-musical-note-20-solid text-4xl"></span>
-                                    <span class="text-sm font-medium">Queue is empty</span>
-                                    <span class="text-xs">Upload tracks to get started</span>
-                                </div>
-
-                                <!-- List -->
-                                <div v-else v-for="(file, index) in player.trackList" :key="file.name + index"
-                                    draggable="true" 
-                                    @dragstart="onDragStart($event, index)"
-                                    @drop="onDrop($event, index)" 
-                                    @dragover.prevent 
-                                    @click="onTrackClick(index)"
-                                    class="group relative flex items-center gap-3 p-3 mb-1 rounded-lg cursor-pointer select-none transition-all border border-transparent"
-                                    :class="[
-                                        player.currentTrack.index === index
-                                            ? 'bg-primary-900/40 border-primary-500/50 border-l-4 shadow-[0_0_15px_rgba(var(--color-primary-500),0.1)]'
-                                            : 'hover:bg-gray-800/50 hover:border-gray-700'
-                                    ]">
+                                <!-- NOW PLAYING CARD -->
+                                <div class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-gray-900 to-gray-950 border border-white/10 p-6 shadow-2xl">
+                                    <!-- Background Glow -->
+                                    <div class="absolute top-0 right-0 w-64 h-64 bg-primary-500/10 blur-[100px] rounded-full pointer-events-none -translate-y-1/2 translate-x-1/2"></div>
                                     
-                                    <!-- Play/Index Icon with Equalizer -->
-                                    <div class="w-6 flex justify-center text-gray-500 group-hover:text-white">
-                                         <div v-if="player.currentTrack.index === index" class="flex items-end gap-[2px] h-4 pb-1">
-                                            <!-- CSS Equalizer Bars -->
-                                            <div class="w-1 bg-primary-400 rounded-sm animate-[audio-eq_0.6s_ease-in-out_infinite] h-2"></div>
-                                            <div class="w-1 bg-primary-400 rounded-sm animate-[audio-eq_0.8s_ease-in-out_infinite_0.1s] h-3"></div>
-                                            <div class="w-1 bg-primary-400 rounded-sm animate-[audio-eq_0.5s_ease-in-out_infinite_0.2s] h-1.5"></div>
-                                         </div>
-                                         <template v-else>
-                                            <span class="text-xs font-mono">{{ index + 1 }}</span>
-                                            <span class="hidden group-hover:block i-heroicons-play-20-solid text-xs"></span>
-                                         </template>
+                                    <div class="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+                                        <div class="min-w-0 flex-1">
+                                            <Transition name="fade" mode="out-in">
+                                                <div v-if="player.transitionState.active" class="flex items-center gap-2 text-primary-400 mb-1">
+                                                    <span class="relative flex h-2 w-2">
+                                                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-400 opacity-75"></span>
+                                                      <span class="relative inline-flex rounded-full h-2 w-2 bg-primary-500"></span>
+                                                    </span>
+                                                    <span class="text-[10px] uppercase tracking-widest font-bold">Mixing from {{ player.transitionState.fromName }}</span>
+                                                </div>
+                                                <div v-else class="flex items-center gap-2 text-gray-500 mb-1">
+                                                    <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                                                    <span class="text-[10px] uppercase tracking-widest font-bold">Now Playing</span>
+                                                </div>
+                                            </Transition>
+                                            
+                                            <h2 class="text-2xl sm:text-3xl font-bold text-white truncate tracking-tight" :title="player.trackList[player.currentTrack.index]?.name">
+                                                {{ player.currentTrack.index !== -1 && player.trackList[player.currentTrack.index] ? player.trackList[player.currentTrack.index].name.replace(/\.[^/.]+$/, "") : 'No Track Selected' }}
+                                            </h2>
+                                        </div>
+
+                                        <div class="flex flex-wrap gap-2">
+                                             <div class="px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-mono text-gray-300 flex items-center gap-1.5">
+                                                <UIcon name="i-heroicons-musical-note" class="w-3 h-3 text-gray-500" />
+                                                {{ currentTrack.bpm }} BPM
+                                             </div>
+                                             <div class="px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-mono flex items-center gap-1.5" :class="currentTrack.duration > 0 ? 'text-primary-400 border-primary-500/20 bg-primary-500/5' : 'text-gray-300'">
+                                                <UIcon name="i-heroicons-clock" class="w-3 h-3" :class="currentTrack.duration > 0 ? 'text-primary-500' : 'text-gray-500'" />
+                                                {{ formatTime(currentTrack.duration) }}
+                                             </div>
+                                        </div>
                                     </div>
 
-                                    <!-- Meta -->
-                                    <div class="flex-1 min-w-0">
-                                        <div class="flex justify-between items-center">
-                                            <p class="truncate text-sm font-medium" :class="player.currentTrack.index === index ? 'text-primary-100' : 'text-gray-300'">
-                                                {{ file.name.replace(/\.[^/.]+$/, "") }}
-                                            </p>
-                                            <!-- Next Up Badge -->
-                                            <UBadge v-if="index === player.currentTrack.index + 1" color="primary" variant="subtle" size="xs" class="ml-2 font-mono text-[9px] px-1 h-4">
-                                                NEXT UP
-                                            </UBadge>
+                                    <!-- WAVEFORM & SEEK -->
+                                    <div class="bg-black/40 rounded-xl border border-white/5 p-4 mb-6 relative group">
+                                         <div class="flex justify-between items-center mb-3">
+                                            <span class="text-[10px] uppercase tracking-wider font-bold text-gray-500 flex items-center gap-1.5">
+                                                <UIcon name="i-heroicons-chart-bar" class="w-3 h-3" />
+                                                Analysis
+                                            </span>
+                                            
+                                            <!-- Stats Popover -->
+                                            <UPopover :ui="{ content: 'w-64 bg-gray-900 border border-white/10 p-0 overflow-hidden rounded-lg shadow-xl' }">
+                                                <button class="text-[10px] font-bold text-gray-500 hover:text-white transition-colors flex items-center gap-1">
+                                                    VIEW STATS <UIcon name="i-heroicons-chevron-down" class="w-3 h-3" />
+                                                </button>
+                                                <template #content>
+                                                    <div class="p-3 bg-gray-950">
+                                                        <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-[10px] font-mono">
+                                                            <div class="text-gray-500">VIBE</div>
+                                                            <div class="text-right text-white font-bold">{{ player.currentTrack.vibe?.name || '--' }}</div>
+                                                            
+                                                            <div class="text-gray-500">ENERGY</div>
+                                                            <div class="text-right text-primary-400 font-bold">{{ player.currentTrack.vibe?.intensity?.toFixed(2) || '0.00' }}</div>
+                                                            
+                                                            <div class="col-span-2 h-px bg-white/10 my-1"></div>
+                                                            
+                                                            <div class="text-gray-500">BASS ENERGY</div>
+                                                            <div class="text-right text-yellow-500 font-bold">{{ player.getLowEnergy().toFixed(0) }}</div>
+                                                        </div>
+                                                    </div>
+                                                </template>
+                                            </UPopover>
+                                        </div>
+
+                                        <div class="h-28 w-full relative flex items-center justify-center rounded-lg overflow-hidden bg-gray-900/50 mb-4 ring-1 ring-white/5">
+                                            <Waveform class="opacity-80 group-hover:opacity-100 transition-opacity duration-500" />
+                                        </div>
+
+                                        <div class="relative h-4 group/seek">
+                                            <URange 
+                                                v-if="player.currentTrack.duration > 0" 
+                                                v-model="seekProgress" 
+                                                :min="0" :max="100" :step="0.1" 
+                                                size="xs" 
+                                                color="primary"
+                                                :ui="{ 
+                                                    base: 'cursor-pointer',
+                                                    track: { base: 'h-1.5 group-hover/seek:h-2 transition-all bg-gray-700' },
+                                                    thumb: { base: 'w-3 h-3 group-hover/seek:w-4 group-hover/seek:h-4 transition-all' }
+                                                }"
+                                            />
+                                            <UProgress v-else :value="0" size="xs" color="gray" class="h-1.5" />
+                                        </div>
+                                    </div>
+
+                                    <!-- VOLUME & EQ -->
+                                    <div class="flex items-center gap-4 bg-black/20 rounded-lg p-3 border border-white/5">
+                                        <div class="flex items-center gap-3 flex-1">
+                                            <button @click="volume === 0 ? volume = 0.5 : volume = 0" class="text-gray-400 hover:text-white transition-colors">
+                                                <UIcon :name="volume === 0 ? 'i-heroicons-speaker-x-mark' : 'i-heroicons-speaker-wave'" class="w-5 h-5" />
+                                            </button>
+                                            <USlider :min="0" :max="1" :step="0.01" v-model="volume" size="sm" color="white" class="flex-1" />
                                         </div>
                                         
-                                        <!-- Sub-meta (BPM / Vibe) -->
-                                        <div class="flex gap-2 text-[10px] items-center mt-0.5" v-if="player.audioBuffers[index]?.vibe">
-                                            <span class="text-gray-500 font-mono bg-gray-900/50 px-1 rounded">{{ player.audioBuffers[index].bpm }} BPM</span>
-                                            <span class="font-bold" :style="{ color: player.audioBuffers[index].vibe.colorA }">{{ player.audioBuffers[index].vibe.name.toUpperCase() }}</span>
+                                        <div class="h-6 w-px bg-white/10 mx-1"></div>
+
+                                        <UPopover :ui="{ content: 'w-auto bg-gray-900 border border-white/10 rounded-xl shadow-2xl p-0' }">
+                                            <UButton 
+                                                label="EQ" 
+                                                color="neutral" 
+                                                variant="ghost" 
+                                                size="xs"
+                                                class="font-mono font-bold"
+                                                trailing-icon="i-heroicons-adjustments-vertical"
+                                            />
+                                            <template #content>
+                                                <div class="p-5 flex gap-4 bg-gray-950/95 backdrop-blur rounded-xl">
+                                                    <div v-for="(freq, index) in [60, 400, 2400, 15000]" :key="freq" class="flex flex-col items-center gap-2 group">
+                                                        <div class="h-32 flex items-center justify-center bg-gray-900/50 rounded-full p-1 ring-1 ring-white/5 group-hover:ring-primary-500/30 transition-all">
+                                                            <USlider orientation="vertical" :min="-12" :max="12" :step="0.1" 
+                                                                :model-value="player.eqNodes[[0, 2, 4, 6][index]]?.gain.value || 0"
+                                                                @update:model-value="(val) => player.setEqGain([0, 2, 4, 6][index], val)" 
+                                                                size="xs" color="primary" 
+                                                                :ui="{ track: { background: 'bg-gray-800' } }"
+                                                            />
+                                                        </div>
+                                                        <div class="text-center">
+                                                            <div class="text-[9px] uppercase font-bold text-gray-500 mb-0.5">{{ ['Bass', 'Lo-Mid', 'Hi-Mid', 'Air'][index] }}</div>
+                                                            <div class="text-[9px] text-gray-600 font-mono">{{ freq >= 1000 ? (freq/1000) + 'k' : freq }}Hz</div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                        </UPopover>
+                                    </div>
+                                </div>
+
+                                <!-- SECONDARY CONTROLS GRID -->
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    
+                                    <!-- AUTOMIX SETTINGS -->
+                                    <div class="bg-gray-900/60 border border-white/5 rounded-xl p-5 hover:border-white/10 transition-colors">
+                                        <div class="flex items-center gap-2 mb-4 text-gray-400">
+                                            <UIcon name="i-heroicons-arrow-path-rounded-square" class="w-4 h-4" />
+                                            <span class="text-xs uppercase tracking-widest font-bold">Automix</span>
                                         </div>
-                                        <div v-else class="h-3 w-20 bg-gray-800 rounded animate-pulse mt-1"></div>
+                                        <div class="grid grid-cols-2 gap-4">
+                                            <UFormField label="Fade In (s)" :ui="{ label: 'text-[10px] uppercase font-bold text-gray-500' }">
+                                                <UInputNumber v-model="player.fadeDuration" size="sm" :min="0" :max="30" class="font-mono" />
+                                            </UFormField>
+                                            <UFormField label="Fade Out (s)" :ui="{ label: 'text-[10px] uppercase font-bold text-gray-500' }">
+                                                <UInputNumber v-model="player.fadeOutDuration" size="sm" :min="0" :max="30" class="font-mono" />
+                                            </UFormField>
+                                        </div>
                                     </div>
 
-                                    <!-- Duration -->
-                                    <div class="text-xs font-mono text-gray-500">
-                                        <span v-if="player.audioBuffers[index]">{{ formatTime(player.audioBuffers[index].buffer.duration) }}</span>
-                                        <span v-else class="i-lucide-loader-2 animate-spin"></span>
-                                    </div>
+                                    <!-- VISUALS SETTINGS -->
+                                    <div class="bg-gray-900/60 border border-white/5 rounded-xl p-5 hover:border-white/10 transition-colors">
+                                        <div class="flex justify-between items-center mb-4">
+                                            <div class="flex items-center gap-2 text-gray-400">
+                                                <UIcon name="i-heroicons-eye" class="w-4 h-4" />
+                                                <span class="text-xs uppercase tracking-widest font-bold">Visuals</span>
+                                            </div>
+                                            <div class="flex items-center gap-2">
+                                                <span class="text-[9px] font-bold text-primary-500/80 uppercase">Auto-Vibe</span>
+                                                <USwitch v-model="player.isVibeAuto" color="primary" size="xs" />
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="space-y-4">
+                                            <div class="grid grid-cols-2 gap-3">
+                                                 <div class="space-y-1">
+                                                    <label class="text-[9px] uppercase font-bold text-gray-500">Speed</label>
+                                                    <USlider :min="0" :max="2" :step="0.1" v-model="uniforms.u_speed.value" size="xs" color="gray" />
+                                                 </div>
+                                                 <div class="space-y-1">
+                                                    <label class="text-[9px] uppercase font-bold text-gray-500">Density</label>
+                                                    <USlider :min="50" :max="500" :step="10" v-model="uniforms.u_partical_size.value" size="xs" color="gray" />
+                                                 </div>
+                                            </div>
 
-                                    <!-- Drag Handle -->
-                                    <div class="opacity-0 group-hover:opacity-100 transition-opacity text-gray-600 cursor-move">
-                                        <span class="i-heroicons-bars-2-20-solid"></span>
+                                            <div class="flex items-center justify-between pt-2 border-t border-white/5">
+                                                <div class="flex items-center gap-2">
+                                                    <USwitch v-model="player.isFlashEnabled" color="primary" size="xs" />
+                                                    <span class="text-[10px] font-bold text-gray-500 uppercase">Flash FX</span>
+                                                </div>
+
+                                                <UPopover>
+                                                    <button class="flex items-center gap-2 px-2 py-1 rounded hover:bg-white/5 transition-colors">
+                                                        <span class="text-[10px] font-bold text-gray-400 uppercase">Theme</span>
+                                                        <div class="flex -space-x-1.5">
+                                                            <span :style="primaryChip" class="size-2.5 rounded-full ring-2 ring-gray-900 shadow-sm" />
+                                                            <span :style="secondaryChip" class="size-2.5 rounded-full ring-2 ring-gray-900 shadow-sm" />
+                                                        </div>
+                                                    </button>
+                                                    <template #content>
+                                                        <div class="flex gap-3 p-3 bg-gray-950 border border-white/10 rounded-xl">
+                                                            <div class="text-center space-y-1">
+                                                                <div class="text-[8px] uppercase text-gray-500 font-bold">Primary</div>
+                                                                <UColorPicker v-model="uniforms.u_color_a.value" class="p-0" />
+                                                            </div>
+                                                            <div class="text-center space-y-1">
+                                                                <div class="text-[8px] uppercase text-gray-500 font-bold">Secondary</div>
+                                                                <UColorPicker v-model="uniforms.u_color_b.value" class="p-0" />
+                                                            </div>
+                                                        </div>
+                                                    </template>
+                                                </UPopover>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
 
-                            <div class="flex gap-2 mt-auto pt-4 border-t border-gray-800">
-                                <UButton @click="player.startPlayer()" :disabled="player.trackList.length == 0"
-                                    label="Start" icon="i-heroicons-play-20-solid" color="primary" variant="solid" block class="flex-1" />
-                                <UButton @click="player.pausePlayer()" icon="i-heroicons-pause-20-solid" color="neutral" variant="ghost" />
-                                <UButton @click="player.stop()" icon="i-heroicons-stop-20-solid" color="neutral" variant="ghost" />
+                            <!-- RIGHT COLUMN: Queue & Playlist -->
+                            <div class="lg:col-span-5 xl:col-span-4 flex flex-col h-[600px] lg:h-auto bg-gray-900/40 border border-white/5 rounded-2xl overflow-hidden backdrop-blur-sm">
+                                
+                                <!-- Queue Header -->
+                                <div class="p-4 border-b border-white/5 bg-gray-900/50 flex justify-between items-center">
+                                    <div class="flex items-center gap-2">
+                                        <UIcon name="i-heroicons-queue-list" class="w-4 h-4 text-primary-400" />
+                                        <span class="font-bold text-sm text-white">QUEUE</span>
+                                        <UBadge color="neutral" variant="soft" size="xs" class="font-mono ml-1">{{ player.trackList.length }}</UBadge>
+                                    </div>
+                                    <UButton icon="i-heroicons-trash" color="neutral" variant="ghost" size="xs" v-if="player.trackList.length > 0" @click="player.trackList = []; player.stop()" />
+                                </div>
+
+                                <!-- Track List -->
+                                <div class="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1 relative">
+                                    
+                                    <!-- Empty State -->
+                                    <div v-if="player.trackList.length === 0" class="absolute inset-0 flex flex-col items-center justify-center text-gray-600 p-6 text-center border-2 border-dashed border-gray-800 m-4 rounded-xl">
+                                        <UIcon name="i-heroicons-musical-note" class="text-4xl mb-3 text-gray-800" />
+                                        <span class="text-sm font-medium text-gray-500">Your queue is empty</span>
+                                        <span class="text-xs text-gray-600 mt-1">Upload tracks below to start the party</span>
+                                    </div>
+
+                                    <!-- Tracks -->
+                                    <div v-for="(file, index) in player.trackList" :key="file.name + index"
+                                        draggable="true" 
+                                        @dragstart="onDragStart($event, index)"
+                                        @drop="onDrop($event, index)" 
+                                        @dragover.prevent 
+                                        @click="onTrackClick(index)"
+                                        class="group relative flex items-center gap-3 p-2.5 rounded-lg cursor-pointer select-none transition-all border border-transparent"
+                                        :class="[
+                                            player.currentTrack.index === index
+                                                ? 'bg-primary-500/10 border-primary-500/20 shadow-[0_0_20px_rgba(var(--color-primary-500),0.05)]'
+                                                : 'hover:bg-white/5 hover:border-white/5'
+                                        ]">
+                                        
+                                        <!-- Index / Status -->
+                                        <div class="w-8 flex justify-center items-center text-gray-500 font-mono text-xs">
+                                             <div v-if="player.currentTrack.index === index" class="flex items-end gap-[2px] h-3">
+                                                <div class="w-0.5 bg-primary-400 animate-[audio-eq_0.6s_ease-in-out_infinite] h-full"></div>
+                                                <div class="w-0.5 bg-primary-400 animate-[audio-eq_0.8s_ease-in-out_infinite_0.1s] h-full"></div>
+                                                <div class="w-0.5 bg-primary-400 animate-[audio-eq_0.5s_ease-in-out_infinite_0.2s] h-full"></div>
+                                             </div>
+                                             <span v-else class="group-hover:hidden">{{ index + 1 }}</span>
+                                             <UIcon name="i-heroicons-play-solid" class="hidden group-hover:block w-3 h-3 text-white" v-if="player.currentTrack.index !== index" />
+                                        </div>
+
+                                        <!-- Info -->
+                                        <div class="flex-1 min-w-0">
+                                            <div class="flex justify-between items-start">
+                                                <p class="truncate text-sm font-medium mb-0.5" :class="player.currentTrack.index === index ? 'text-primary-100' : 'text-gray-300'">
+                                                    {{ file.name.replace(/\.[^/.]+$/, "") }}
+                                                </p>
+                                            </div>
+                                            
+                                            <div class="flex items-center gap-2">
+                                                 <UBadge v-if="index === player.currentTrack.index + 1" color="primary" variant="solid" size="xs" class="text-[8px] px-1 py-0 h-3.5 leading-none">NEXT</UBadge>
+                                                 
+                                                 <div class="flex gap-2 text-[9px] items-center text-gray-500 font-mono" v-if="player.audioBuffers[index]?.vibe">
+                                                    <span>{{ player.audioBuffers[index].bpm }} BPM</span>
+                                                    <span class="w-0.5 h-0.5 rounded-full bg-gray-600"></span>
+                                                    <span class="font-bold tracking-wider" :style="{ color: player.audioBuffers[index].vibe.colorA }">
+                                                        {{ player.audioBuffers[index].vibe.name.toUpperCase() }}
+                                                    </span>
+                                                 </div>
+                                                 <div v-else class="h-2 w-16 bg-white/5 rounded animate-pulse"></div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Duration -->
+                                        <div class="text-xs font-mono text-gray-600 group-hover:text-gray-400">
+                                            <span v-if="player.audioBuffers[index]">{{ formatTime(player.audioBuffers[index].buffer.duration) }}</span>
+                                            <UIcon v-else name="i-lucide-loader-2" class="animate-spin w-3 h-3" />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Playback Actions -->
+                                <div class="p-4 bg-gray-900/80 border-t border-white/5 flex gap-2">
+                                     <UButton 
+                                        @click="player.startPlayer()" 
+                                        :disabled="player.trackList.length == 0"
+                                        :label="player.isPlaying ? 'Restart' : 'Start Playback'" 
+                                        :icon="player.isPlaying ? 'i-heroicons-arrow-path' : 'i-heroicons-play-20-solid'" 
+                                        color="primary" 
+                                        variant="solid" 
+                                        size="md"
+                                        block 
+                                        class="flex-1 font-bold shadow-lg shadow-primary-500/20" 
+                                    />
+                                    <UButton @click="player.pausePlayer()" icon="i-heroicons-pause-20-solid" color="neutral" variant="soft" size="md" />
+                                    <UButton @click="player.stop()" icon="i-heroicons-stop-20-solid" color="neutral" variant="soft" size="md" />
+                                </div>
+
+                                <!-- Upload Area -->
+                                <div class="p-2 bg-gray-950 border-t border-white/5">
+                                    <div class="relative group">
+                                        <label class="flex flex-col items-center justify-center w-full h-16 border border-gray-800 border-dashed rounded-lg cursor-pointer bg-gray-900/30 hover:bg-gray-800 hover:border-gray-600 transition-all">
+                                            <div class="flex items-center gap-3 text-gray-500 group-hover:text-gray-300">
+                                                <UIcon name="i-heroicons-arrow-up-tray" class="w-5 h-5" />
+                                                <span class="text-xs font-medium">Add tracks to queue</span>
+                                            </div>
+                                            <input type="file" class="hidden" multiple accept="audio/*" @change="onNativeFileChange" />
+                                        </label>
+                                        
+                                        <!-- Progress Overlay -->
+                                        <Transition name="fade">
+                                            <div v-if="player.processingState.isProcessing" class="absolute inset-0 bg-gray-900 rounded-lg flex items-center justify-between px-4 z-10 border border-primary-500/30">
+                                                <div class="flex items-center gap-3">
+                                                    <UIcon name="i-lucide-loader-2" class="w-4 h-4 text-primary-400 animate-spin" />
+                                                    <div class="flex flex-col">
+                                                        <span class="text-[10px] font-bold text-primary-400 uppercase tracking-wide">Analyzing Vibes</span>
+                                                        <span class="text-[9px] text-gray-500 font-mono">{{ player.processingState.current }} / {{ player.processingState.total }} tracks</span>
+                                                    </div>
+                                                </div>
+                                                <div class="w-20">
+                                                     <UProgress :value="(player.processingState.current / player.processingState.total) * 100" size="xs" color="primary" />
+                                                </div>
+                                            </div>
+                                        </Transition>
+                                    </div>
+                                </div>
                             </div>
+
                         </div>
                     </div>
                 </div>
@@ -292,15 +406,7 @@ const secondaryChip = computed(() => ({ backgroundColor: uniforms.value.u_color_
 async function onSubmit() {
     if (trackList.value.length === 0) return;
     uploadState.value = true;
-    await player.initTracks([...player.trackList, ...trackList.value]); // Append mode? Or replace? 
-    // Actually initTracks replaces usually. Let's assume replace for now or check initTracks.
-    // Checking player.ts... initTracks does "this.trackList = tracks". 
-    // So it replaces. The user logic in Overflow was "Upload tracks".
-    // I made UFileUpload trigger onSubmit on change.
-    
-    // Let's keep original behavior: Upload replaces or inits. 
-    // Actually, I should check if I broke appending. 
-    // For now I will stick to what was there, just nicer UI.
+    await player.initTracks([...player.trackList, ...trackList.value]);
     
     uploadState.value = false;
     trackList.value = []; // clear input
@@ -359,10 +465,10 @@ function formatTime(seconds: number) {
 </script>
 
 
-<style>
+<style scoped>
 @keyframes audio-eq {
-  0%, 100% { height: 4px; }
-  50% { height: 12px; }
+  0%, 100% { height: 20%; opacity: 0.5; }
+  50% { height: 100%; opacity: 1; }
 }
 
 .fade-enter-active,
@@ -373,5 +479,20 @@ function formatTime(seconds: number) {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+/* Custom Scrollbar for the list */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 </style>
