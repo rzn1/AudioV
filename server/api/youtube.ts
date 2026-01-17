@@ -2,9 +2,10 @@ import { defineEventHandler, getQuery, setHeader, createError } from 'h3'
 import YTDlpWrap from 'yt-dlp-wrap'
 import fs from 'node:fs'
 import path from 'node:path'
+import os from 'node:os'
 
 const BINARY_NAME = process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp'
-const BINARY_PATH = path.join(process.cwd(), BINARY_NAME)
+const BINARY_PATH = path.join(os.tmpdir(), BINARY_NAME)
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event)
