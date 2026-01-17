@@ -1,78 +1,61 @@
 import { defineEventHandler, getQuery, setHeader, createError } from 'h3'
 import YTDlpWrap from 'yt-dlp-wrap'
-import fs from 'node:fs'
 import path from 'node:path'
-import os from 'node:os'
-
-const BINARY_NAME = process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp'
-const BINARY_PATH = path.join(os.tmpdir(), BINARY_NAME)
+import fs from 'node:fs'
 
 export default defineEventHandler(async (event) => {
-  const query = getQuery(event)
-  const url = query.url as string
+    const query = getQuery(event)
+    const url = query.url as string
 
-  if (!url) {
-    throw createError({ statusCode: 400, statusMessage: 'Invalid YouTube URL' })
-  }
-
-  try {
-    // 1. Ensure binary exists
-    if (!fs.existsSync(BINARY_PATH)) {
-        console.log('yt-dlp binary not found. Attempting to download...');
-        try {
-            // Try static method (v2.x)
-            // @ts-ignore
-            if (typeof YTDlpWrap.downloadFromGithub === 'function') {
-                // @ts-ignore
-                await YTDlpWrap.downloadFromGithub(BINARY_PATH);
-            } 
-            // Handle possible default export issue in some envs
-            // @ts-ignore
-            else if (YTDlpWrap.default && typeof YTDlpWrap.default.downloadFromGithub === 'function') {
-                 // @ts-ignore
-                await YTDlpWrap.default.downloadFromGithub(BINARY_PATH);
-            }
-            else {
-                throw new Error('Could not find downloadFromGithub method on YTDlpWrap');
-            }
-            console.log('yt-dlp binary downloaded successfully.');
-        } catch (downloadError) {
-             console.error('Failed to auto-download yt-dlp:', downloadError);
-             throw new Error('Server missing yt-dlp binary. Please install it manually in the project root.');
-        }
+    if (!url) {
+        throw createError({ statusCode: 400, statusMessage: 'Invalid YouTube URL' })
     }
 
-    // Handle ESM/CJS interop for Constructor
-    // @ts-ignore
-    const YTDlpClass = YTDlpWrap.default || YTDlpWrap;
-    const ytDlpWrap = new YTDlpClass(BINARY_PATH)
-
-    let title = 'YouTube Audio'
     try {
-        const metadata = await ytDlpWrap.execPromise([url, '--dump-json'])
-        const json = JSON.parse(metadata)
-        title = json.title.replace(/[^\w\s-]/gi, '')
-    } catch (e) {
-        console.warn('Failed to fetch metadata, using default title', e)
+        // Locate binary
+        // In Vercel, the bin folder should be at the root of the task
+        const filename = process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp'
+        let binaryPath = path.join(process.cwd(), 'bin', filename)
+
+        // Fallback/Check
+        if (!fs.existsSync(binaryPath)) {
+            // Try looking in alternative locations if Vercel moves things around?
+            // But simply logging relevant info is good for debug
+            console.warn(`Binary not found at ${binaryPath}. Checking process.cwd()...`);
+            // Maybe it's in a different relative path?
+        }
+
+        // Initialize Wrapper with explicit path
+        // @ts-ignore
+        const YTDlpClass = YTDlpWrap.default || YTDlpWrap;
+        const ytDlpWrap = new YTDlpClass(binaryPath)
+
+        let title = 'YouTube Audio'
+        try {
+            const metadata = await ytDlpWrap.execPromise([url, '--dump-json'])
+            const json = JSON.parse(metadata)
+            title = json.title.replace(/[^\w\s-]/gi, '')
+        } catch (e: any) {
+            console.warn('Failed to fetch metadata:', e.message)
+        }
+
+        setHeader(event, 'Content-Type', 'audio/mpeg')
+        setHeader(event, 'Content-Disposition', `attachment; filename="${encodeURIComponent(title)}.mp3"`)
+        setHeader(event, 'Transfer-Encoding', 'chunked')
+
+        const stream = ytDlpWrap.execStream([
+            url,
+            '-f', 'bestaudio',
+        ])
+
+        stream.on('error', (err: any) => {
+            console.error('yt-dlp Stream Error:', err)
+        })
+
+        return stream
+
+    } catch (e: any) {
+        console.error('YouTube Proxy Error:', e)
+        throw createError({ statusCode: 500, statusMessage: e.message || 'Failed to process audio' })
     }
-
-    setHeader(event, 'Content-Type', 'audio/mpeg')
-    setHeader(event, 'Content-Disposition', `attachment; filename="${encodeURIComponent(title)}.mp3"`)
-    setHeader(event, 'Transfer-Encoding', 'chunked')
-
-    const stream = ytDlpWrap.execStream([
-        url,
-        '-f', 'bestaudio',
-    ])
-
-    stream.on('error', (err: any) => {
-        console.error('yt-dlp Stream Error:', err)
-    })
-
-    return stream
-
-  } catch (e: any) {
-    console.error('YouTube Proxy Error:', e)
-    throw createError({ statusCode: 500, statusMessage: e.message || 'Failed to process audio' })
-  }
 })
