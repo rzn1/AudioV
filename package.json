@@ -24,7 +24,8 @@
     "three": "^0.165.0",
     "vue": "^3.4.27",
     "vue-router": "^4.3.2",
-    "web-audio-beat-detector": "^8.2.31"
+    "web-audio-beat-detector": "^8.2.31",
+    "yt-dlp-wrap": "^2.3.12"
   },
   "devDependencies": {
     "@types/howler": "^2.2.11",

@@ -27,10 +27,10 @@
             <template #body>
                 <div class="w-full h-[85vh] sm:h-auto overflow-y-auto sm:overflow-visible bg-gray-950/90 sm:bg-transparent">
                     <div class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
-                        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
+                        <div class="grid grid-cols-1 lg:grid-cols-12 grid-rows-1 gap-6 lg:gap-8 h-full">
                             
                             <!-- LEFT COLUMN: Main Controls -->
-                            <div class="lg:col-span-7 xl:col-span-8 flex flex-col gap-6">
+                            <div class="lg:col-span-7 xl:col-span-8 flex flex-col gap-6 h-full lg:overflow-y-auto custom-scrollbar pr-1">
                                 
                                 <!-- NOW PLAYING CARD -->
                                 <div class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-gray-900 to-gray-950 border border-white/10 p-6 shadow-2xl">
@@ -243,7 +243,7 @@
                             </div>
 
                             <!-- RIGHT COLUMN: Queue & Playlist -->
-                            <div class="lg:col-span-5 xl:col-span-4 flex flex-col h-[600px] lg:h-auto bg-gray-900/40 border border-white/5 rounded-2xl overflow-hidden backdrop-blur-sm">
+                            <div class="lg:col-span-5 xl:col-span-4 flex flex-col h-[500px] lg:h-0 lg:min-h-full bg-gray-900/40 border border-white/5 rounded-2xl overflow-hidden backdrop-blur-sm">
                                 
                                 <!-- Queue Header -->
                                 <div class="p-4 border-b border-white/5 bg-gray-900/50 flex justify-between items-center">
@@ -338,12 +338,39 @@
                                 </div>
 
                                 <!-- Upload Area -->
-                                <div class="p-2 bg-gray-950 border-t border-white/5">
+                                <div class="p-3 bg-gray-950 border-t border-white/5 space-y-3">
+                                    
+                                    <!-- YouTube Input -->
+                                    <div class="flex gap-2">
+                                        <UInput 
+                                            v-model="youtubeUrl" 
+                                            placeholder="Paste YouTube URL..." 
+                                            size="xs" 
+                                            color="gray" 
+                                            variant="outline"
+                                            class="flex-1 font-mono text-[10px]"
+                                            :ui="{ icon: { trailing: { pointer: '' } } }"
+                                            @keyup.enter="addYoutubeTrack"
+                                        >
+                                            <template #trailing>
+                                                <UButton 
+                                                    v-if="youtubeUrl"
+                                                    :loading="isDownloading"
+                                                    @click="addYoutubeTrack" 
+                                                    color="primary" 
+                                                    variant="ghost" 
+                                                    size="2xs" 
+                                                    icon="i-heroicons-arrow-right-20-solid"
+                                                />
+                                            </template>
+                                        </UInput>
+                                    </div>
+
                                     <div class="relative group">
-                                        <label class="flex flex-col items-center justify-center w-full h-16 border border-gray-800 border-dashed rounded-lg cursor-pointer bg-gray-900/30 hover:bg-gray-800 hover:border-gray-600 transition-all">
-                                            <div class="flex items-center gap-3 text-gray-500 group-hover:text-gray-300">
-                                                <UIcon name="i-heroicons-arrow-up-tray" class="w-5 h-5" />
-                                                <span class="text-xs font-medium">Add tracks to queue</span>
+                                        <label class="flex flex-col items-center justify-center w-full h-12 border border-gray-800 border-dashed rounded-lg cursor-pointer bg-gray-900/30 hover:bg-gray-800 hover:border-gray-600 transition-all">
+                                            <div class="flex items-center gap-2 text-gray-500 group-hover:text-gray-300">
+                                                <UIcon name="i-heroicons-arrow-up-tray" class="w-4 h-4" />
+                                                <span class="text-[10px] font-medium uppercase tracking-wider">Drop / Click to Upload</span>
                                             </div>
                                             <input type="file" class="hidden" multiple accept="audio/*" @change="onNativeFileChange" />
                                         </label>
@@ -394,6 +421,8 @@ const seekProgress = computed({
 const trackList = ref<File[]>([]);
 const uploadState = ref(false);
 const volume = ref(player.audioVolume);
+const youtubeUrl = ref('');
+const isDownloading = ref(false);
 
 watch(volume, (newVolume) => {
     player.setAudioVolume(newVolume);
@@ -402,11 +431,54 @@ watch(volume, (newVolume) => {
 const primaryChip = computed(() => ({ backgroundColor: uniforms.value.u_color_a.value }))
 const secondaryChip = computed(() => ({ backgroundColor: uniforms.value.u_color_b.value }))
 
+async function addYoutubeTrack() {
+    if (!youtubeUrl.value) return;
+    
+    isDownloading.value = true;
+    const toastId = 'yt-download';
+    toast.add({ id: toastId, title: 'Downloading...', description: 'Fetching audio from YouTube', icon: 'i-lucide-loader-2', color: 'primary', timeout: 0 })
+    
+    try {
+        const response = await fetch(`/api/youtube?url=${encodeURIComponent(youtubeUrl.value)}`);
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.statusMessage || response.statusText || 'Failed to fetch');
+        }
+        
+        // Try to get filename from header
+        const disposition = response.headers.get('Content-Disposition');
+        let filename = 'YouTube Track.mp3';
+        if (disposition && disposition.indexOf('filename=') !== -1) {
+            const match = /filename="?([^"]+)"?/.exec(disposition);
+            if (match && match[1]) {
+                filename = decodeURIComponent(match[1]);
+                if (!filename.endsWith('.mp3')) filename += '.mp3';
+            }
+        }
+        
+        const blob = await response.blob();
+        const file = new File([blob], filename, { type: 'audio/mpeg' });
+        
+        // Add to player
+        await player.addTracks([file]);
+        
+        youtubeUrl.value = '';
+        toast.remove(toastId);
+        toast.add({ title: 'Success', description: 'Track added to queue', icon: 'i-heroicons-check', color: 'green' });
+        
+    } catch (e) {
+        toast.remove(toastId);
+        toast.add({ title: 'Error', description: 'Could not load YouTube track', icon: 'i-heroicons-exclamation-triangle', color: 'red' });
+    } finally {
+        isDownloading.value = false;
+    }
+}
+
 // Upload Logic
 async function onSubmit() {
     if (trackList.value.length === 0) return;
     uploadState.value = true;
-    await player.initTracks([...player.trackList, ...trackList.value]);
+    await player.addTracks(trackList.value);
     
     uploadState.value = false;
     trackList.value = []; // clear input
@@ -444,7 +516,7 @@ function onNativeFileChange(event: Event) {
     const input = event.target as HTMLInputElement;
     if (input.files && input.files.length > 0) {
         const files = Array.from(input.files);
-        player.initTracks([...player.trackList, ...files]);
+        player.addTracks(files);
         input.value = ''; // Reset input
         
         toast.add({

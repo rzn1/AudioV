@@ -200,11 +200,11 @@ export const usePlayerStore = defineStore("player", {
       };
     },
 
-    async initTracks(tracks: File[]) {
+    async addTracks(newTracks: File[]) {
       if (!audioCtx) return;
 
       this.processingState.isProcessing = true;
-      this.processingState.total = tracks.length;
+      this.processingState.total = newTracks.length;
       this.processingState.current = 0;
 
       if (!process.client) return;
@@ -214,47 +214,53 @@ export const usePlayerStore = defineStore("player", {
         type: 'module'
       });
 
-      for (const res of tracks) {
+      for (const res of newTracks) {
         this.processingState.current++;
-        const arrayBuffer = await res.arrayBuffer();
-        const buffer = await audioCtx.decodeAudioData(arrayBuffer);
-
-        // Prepare data for worker
-        const channelData = buffer.getChannelData(0);
-
-        // Promisify worker response
-        const analysis = await new Promise<any>((resolve, reject) => {
-          const id = Math.random().toString(36).substring(7);
-          const handler = (e: MessageEvent) => {
-            if (e.data.id === id) {
-              worker.removeEventListener('message', handler);
-              if (e.data.success) resolve(e.data);
-              else reject(e.data.error);
-            }
-          };
-          worker.addEventListener('message', handler);
-          worker.postMessage({
-            id,
-            channelData: channelData, // Cloned
-            sampleRate: buffer.sampleRate
-          });
-        });
-
-        this.audioBuffers.push({
-          buffer,
-          bpm: analysis.bpm,
-          rmsValues: analysis.rmsValues,
-          startPoint: analysis.startPoint,
-          endPoint: analysis.endPoint,
-          vibe: this.determineVibe(analysis.bpm, analysis.energy, analysis.brightness)
-        });
+        try {
+            const arrayBuffer = await res.arrayBuffer();
+            const buffer = await audioCtx.decodeAudioData(arrayBuffer);
+    
+            // Prepare data for worker
+            const channelData = buffer.getChannelData(0);
+    
+            // Promisify worker response
+            const analysis = await new Promise<any>((resolve, reject) => {
+              const id = Math.random().toString(36).substring(7);
+              const handler = (e: MessageEvent) => {
+                if (e.data.id === id) {
+                  worker.removeEventListener('message', handler);
+                  if (e.data.success) resolve(e.data);
+                  else reject(e.data.error);
+                }
+              };
+              worker.addEventListener('message', handler);
+              worker.postMessage({
+                id,
+                channelData: channelData, // Cloned
+                sampleRate: buffer.sampleRate
+              });
+            });
+    
+            this.audioBuffers.push({
+              buffer,
+              bpm: analysis.bpm,
+              rmsValues: analysis.rmsValues,
+              startPoint: analysis.startPoint,
+              endPoint: analysis.endPoint,
+              vibe: this.determineVibe(analysis.bpm, analysis.energy, analysis.brightness)
+            });
+            
+            // Add to track list only after successful processing
+            this.trackList.push(res);
+        } catch (e) {
+            console.error("Error adding track:", res.name, e);
+        }
 
         // Give the UI a breather to render the progress bar and prevent freezing
         await new Promise(resolve => setTimeout(resolve, 50));
       }
 
       this.processingState.isProcessing = false;
-      this.trackList = tracks;
     },
 
     determineVibe(bpm: number, energy: number, brightness: number): any {
