@@ -2,6 +2,7 @@ import { defineEventHandler, getQuery, setHeader, createError } from 'h3'
 import { spawn } from 'node:child_process'
 import path from 'node:path'
 import fs from 'node:fs'
+import os from 'node:os'
 
 export default defineEventHandler(async (event) => {
     const query = getQuery(event)
@@ -13,15 +14,45 @@ export default defineEventHandler(async (event) => {
 
     try {
         // Locate binary
-        const filename = process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp'
-        const binaryPath = path.join(process.cwd(), 'bin', filename)
+        let filename = process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp'
+        // 1. Check local public/bin (Dev environment)
+        let binaryPath = path.join(process.cwd(), 'public', 'bin', filename)
 
         if (!fs.existsSync(binaryPath)) {
-            console.warn(`Binary not found at ${binaryPath}`);
+            // 2. Check /tmp (Vercel warm cache)
+            const tmpPath = path.join(process.platform === 'win32' ? os.tmpdir() : '/tmp', filename);
+            if (fs.existsSync(tmpPath)) {
+                binaryPath = tmpPath;
+            } else {
+                // 3. Download from self (Vercel cold start)
+                console.log('Binary not found locally. Downloading from public assets...');
+                const host = event.node.req.headers['host'];
+                const protocol = event.node.req.headers['x-forwarded-proto'] || 'http'; // Vercel behind proxy
+                const downloadUrl = `${protocol}://${host}/bin/${filename}`;
+
+                console.log(`Downloading from ${downloadUrl} to ${tmpPath}`);
+
+                // Using global fetch
+                const res = await fetch(downloadUrl);
+                if (!res.ok) {
+                    throw new Error(`Failed to download binary from ${downloadUrl}: ${res.statusText}`);
+                }
+
+                const arrayBuffer = await res.arrayBuffer();
+                const buffer = Buffer.from(arrayBuffer);
+
+                fs.writeFileSync(tmpPath, buffer);
+                if (process.platform !== 'win32') {
+                    fs.chmodSync(tmpPath, '755');
+                }
+                binaryPath = tmpPath;
+                console.log('Binary downloaded and saved to ' + binaryPath);
+            }
         }
 
         // Get Title
         let title = 'YouTube Audio'
+
         try {
             const metadataProcess = spawn(binaryPath, [url, '--dump-json']);
 
