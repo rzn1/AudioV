@@ -1,6 +1,9 @@
 {
     "functions": {
-        "server/api/**/*.ts": {
+        "**/*.js": {
+            "includeFiles": "bin/**"
+        },
+        "index": {
             "includeFiles": "bin/**"
         }
     }

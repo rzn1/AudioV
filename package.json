@@ -10,7 +10,6 @@
     "postinstall": "node scripts/download-yt-dlp.js"
   },
   "dependencies": {
-    "@distube/ytdl-core": "^4.16.12",
     "@nuxt/ui": "^4.0.1",
     "@pinia/nuxt": "^0.11.2",
     "@tresjs/cientos": "^3.9.0",
@@ -25,11 +24,11 @@
     "three": "^0.165.0",
     "vue": "^3.4.27",
     "vue-router": "^4.3.2",
-    "web-audio-beat-detector": "^8.2.31",
-    "yt-dlp-wrap": "^2.3.12"
+    "web-audio-beat-detector": "^8.2.31"
   },
   "devDependencies": {
     "@types/howler": "^2.2.11",
-    "baseline-browser-mapping": "^2.9.11"
+    "baseline-browser-mapping": "^2.9.11",
+    "yt-dlp-wrap": "^2.3.12"
   }
 }

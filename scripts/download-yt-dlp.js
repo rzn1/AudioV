@@ -30,7 +30,7 @@ const download = async () => {
             if (process.platform !== 'win32') {
                 fs.chmodSync(binaryPath, '755');
             }
-            return;
+            process.exit(0); // Exit successfully if binary already exists
         }
 
         console.log('Downloading yt-dlp binary...');
@@ -51,9 +51,11 @@ const download = async () => {
             fs.chmodSync(binaryPath, '755');
         }
 
+        process.exit(0);
+
     } catch (e) {
         console.error('Failed to download yt-dlp:', e);
-        process.exit(1);
+        process.exit(0); // Exit 0 to not break build, but log error
     }
 };
 

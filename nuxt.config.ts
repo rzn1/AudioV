@@ -13,5 +13,10 @@ export default defineNuxtConfig({
 
   tres: {
     devtools: true,
+  },
+
+  nitro: {
+    scanDirs: ['server'],
+    ignore: ['bin']
   }
 })

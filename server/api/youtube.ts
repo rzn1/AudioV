@@ -1,5 +1,5 @@
 import { defineEventHandler, getQuery, setHeader, createError } from 'h3'
-import YTDlpWrap from 'yt-dlp-wrap'
+import { spawn } from 'node:child_process'
 import path from 'node:path'
 import fs from 'node:fs'
 
@@ -13,46 +13,58 @@ export default defineEventHandler(async (event) => {
 
     try {
         // Locate binary
-        // In Vercel, the bin folder should be at the root of the task
         const filename = process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp'
-        let binaryPath = path.join(process.cwd(), 'bin', filename)
+        const binaryPath = path.join(process.cwd(), 'bin', filename)
 
-        // Fallback/Check
         if (!fs.existsSync(binaryPath)) {
-            // Try looking in alternative locations if Vercel moves things around?
-            // But simply logging relevant info is good for debug
-            console.warn(`Binary not found at ${binaryPath}. Checking process.cwd()...`);
-            // Maybe it's in a different relative path?
+            console.warn(`Binary not found at ${binaryPath}`);
         }
 
-        // Initialize Wrapper with explicit path
-        // @ts-ignore
-        const YTDlpClass = YTDlpWrap.default || YTDlpWrap;
-        const ytDlpWrap = new YTDlpClass(binaryPath)
-
+        // Get Title
         let title = 'YouTube Audio'
         try {
-            const metadata = await ytDlpWrap.execPromise([url, '--dump-json'])
-            const json = JSON.parse(metadata)
-            title = json.title.replace(/[^\w\s-]/gi, '')
+            const metadataProcess = spawn(binaryPath, [url, '--dump-json']);
+
+            let data = '';
+            for await (const chunk of metadataProcess.stdout) {
+                data += chunk;
+            }
+            const json = JSON.parse(data);
+            title = json.title.replace(/[^\w\s-]/gi, '');
         } catch (e: any) {
-            console.warn('Failed to fetch metadata:', e.message)
+            console.warn('Failed to fetch metadata:', e.message);
         }
 
         setHeader(event, 'Content-Type', 'audio/mpeg')
         setHeader(event, 'Content-Disposition', `attachment; filename="${encodeURIComponent(title)}.mp3"`)
         setHeader(event, 'Transfer-Encoding', 'chunked')
 
-        const stream = ytDlpWrap.execStream([
+        // Spawn ffmpeg/yt-dlp stream
+        const args = [
             url,
             '-f', 'bestaudio',
-        ])
+            '-o', '-' // Output to stdout
+        ];
 
-        stream.on('error', (err: any) => {
-            console.error('yt-dlp Stream Error:', err)
-        })
+        const ytDlpProcess = spawn(binaryPath, args);
 
-        return stream
+        ytDlpProcess.stderr.on('data', (data) => {
+            // Optional: log progress?
+            // console.log(`stderr: ${data}`);
+        });
+
+        ytDlpProcess.on('close', (code) => {
+            if (code !== 0) {
+                console.error(`yt-dlp process exited with code ${code}`);
+            }
+        });
+
+        ytDlpProcess.on('error', (err) => {
+            console.error('Failed to start subprocess.', err);
+            throw createError({ statusCode: 500, statusMessage: 'Failed to start download process' })
+        });
+
+        return ytDlpProcess.stdout;
 
     } catch (e: any) {
         console.error('YouTube Proxy Error:', e)
