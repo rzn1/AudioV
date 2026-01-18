@@ -13,6 +13,51 @@ export default defineEventHandler(async (event) => {
     }
 
     try {
+        const platform = process.platform;
+        const arch = process.arch;
+        const cwd = process.cwd();
+
+        // Debug: List files in likely locations
+        const debugInfo: any = {
+            platform,
+            arch,
+            cwd,
+            files: [],
+            pathSearch: []
+        };
+
+        const searchPaths = [
+            path.join(cwd, 'bin'),
+            path.join(cwd, '..', 'bin'),
+            '/var/task/bin'
+        ];
+
+        for (const dir of searchPaths) {
+            try {
+                if (fs.existsSync(dir)) {
+                    debugInfo.files.push({ dir, contents: fs.readdirSync(dir) });
+                } else {
+                    debugInfo.files.push({ dir, status: 'missing' });
+                }
+            } catch (e: any) {
+                debugInfo.files.push({ dir, error: e.message });
+            }
+        }
+
+        // Return debug info instead of stream
+        return {
+            status: 'debug',
+            info: debugInfo
+        };
+    } catch (e: any) {
+        return {
+            status: 'error',
+            error: e.message
+        }
+    }
+})
+
+/*
         // Locate binary
         let filename = process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp'
 
@@ -91,7 +136,7 @@ export default defineEventHandler(async (event) => {
         ytDlpProcess.on('error', (err) => {
             console.error('Failed to start subprocess.', err);
             throw createError({ statusCode: 500, statusMessage: 'Failed to start download process' })
-        });
+        })
 
         return ytDlpProcess.stdout;
 
@@ -100,3 +145,4 @@ export default defineEventHandler(async (event) => {
         throw createError({ statusCode: 500, statusMessage: e.message || 'Failed to process audio' })
     }
 })
+*/
