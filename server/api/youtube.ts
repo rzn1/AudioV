@@ -74,14 +74,37 @@ export default defineEventHandler(async (event) => {
 
         const ytDlpProcess = spawn(binaryPath, args);
 
+        let stderrOutput = '';
         ytDlpProcess.stderr.on('data', (data) => {
-            console.log(`yt-dlp: ${data}`);
+            const msg = data.toString();
+            stderrOutput += msg;
+            console.log(`yt-dlp stderr: ${msg}`);
+        });
+
+        ytDlpProcess.on('close', (code) => {
+            if (code !== 0) {
+                console.error(`yt-dlp exited with code ${code}`);
+                console.error(`Full stderr output: ${stderrOutput}`);
+            }
         });
 
         ytDlpProcess.on('error', (err) => {
-            console.error('Failed to start subprocess.', err);
-            throw createError({ statusCode: 500, statusMessage: 'Failed to start download process' })
-        })
+            console.error('Failed to start yt-dlp subprocess:', err);
+            throw createError({ statusCode: 500, statusMessage: 'Failed to start download process: ' + err.message })
+        });
+
+        // Check if stdout is actually producing data
+        let hasData = false;
+        ytDlpProcess.stdout.on('data', () => {
+            if (!hasData) {
+                hasData = true;
+                console.log('yt-dlp stdout: receiving audio data...');
+            }
+        });
+
+        ytDlpProcess.stdout.on('end', () => {
+            console.log('yt-dlp stdout: stream ended');
+        });
 
         return ytDlpProcess.stdout;
 
