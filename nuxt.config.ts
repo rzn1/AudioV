@@ -16,6 +16,7 @@ export default defineNuxtConfig({
   },
 
   nitro: {
+    preset: 'vercel',
     scanDirs: ['server'],
     ignore: ['bin']
   }
