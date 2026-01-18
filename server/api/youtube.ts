@@ -15,46 +15,44 @@ export default defineEventHandler(async (event) => {
     try {
         // Locate binary
         let filename = process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp'
-        // 1. Check local public/bin (Dev environment)
-        let binaryPath = path.join(process.cwd(), 'public', 'bin', filename)
 
-        if (!fs.existsSync(binaryPath)) {
-            // 2. Check /tmp (Vercel warm cache)
-            const tmpPath = path.join(process.platform === 'win32' ? os.tmpdir() : '/tmp', filename);
-            if (fs.existsSync(tmpPath)) {
-                binaryPath = tmpPath;
-            } else {
-                // 3. Download from self (Vercel cold start)
-                console.log('Binary not found locally. Downloading from public assets...');
-                const host = event.node.req.headers['host'];
-                const protocol = event.node.req.headers['x-forwarded-proto'] || 'http'; // Vercel behind proxy
-                const downloadUrl = `${protocol}://${host}/bin/${filename}`;
+        // Search paths
+        const possiblePaths = [
+            path.join(process.cwd(), 'bin', filename),
+            path.join(process.cwd(), '..', 'bin', filename), // Sometimes one level up in lambda
+            path.join(process.cwd(), '..', '..', 'bin', filename),
+            '/var/task/bin/' + filename
+        ];
 
-                console.log(`Downloading from ${downloadUrl} to ${tmpPath}`);
+        let binaryPath = '';
+        for (const p of possiblePaths) {
+            if (fs.existsSync(p)) {
+                binaryPath = p;
+                console.log('Found binary at:', binaryPath);
+                break;
+            }
+        }
 
-                // Using global fetch
-                const res = await fetch(downloadUrl);
-                if (!res.ok) {
-                    throw new Error(`Failed to download binary from ${downloadUrl}: ${res.statusText}`);
-                }
+        if (!binaryPath) {
+            console.error('Binary NOT found. Searched:', possiblePaths);
+            throw new Error('yt-dlp binary not found on server.');
+        }
 
-                const arrayBuffer = await res.arrayBuffer();
-                const buffer = Buffer.from(arrayBuffer);
-
-                fs.writeFileSync(tmpPath, buffer);
-                if (process.platform !== 'win32') {
-                    fs.chmodSync(tmpPath, '755');
-                }
-                binaryPath = tmpPath;
-                console.log('Binary downloaded and saved to ' + binaryPath);
+        // Ensure permissions
+        if (process.platform !== 'win32') {
+            try {
+                fs.chmodSync(binaryPath, '755');
+            } catch (e) {
+                console.warn('Failed to chmod binary:', e);
             }
         }
 
         // Get Title
         let title = 'YouTube Audio'
-
         try {
+            console.log('Fetching metadata...');
             const metadataProcess = spawn(binaryPath, [url, '--dump-json']);
+
 
             let data = '';
             for await (const chunk of metadataProcess.stdout) {

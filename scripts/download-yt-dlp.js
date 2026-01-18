@@ -6,8 +6,7 @@ import os from 'os';
 const download = async () => {
     // In Vercel, we might need to handle where we write. 
     // But 'postinstall' runs during build, so writing to project root is usually fine.
-    // We download to public/bin so it's available as a static asset
-    const binDir = path.join(process.cwd(), 'public', 'bin');
+    const binDir = path.join(process.cwd(), 'bin');
     if (!fs.existsSync(binDir)) {
         fs.mkdirSync(binDir, { recursive: true });
     }
