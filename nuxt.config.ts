@@ -18,6 +18,30 @@ export default defineNuxtConfig({
   nitro: {
     preset: 'vercel',
     scanDirs: ['server'],
-    ignore: ['bin']
+    ignore: ['bin'],
+    hooks: {
+      'compiled': async (nitro: any) => {
+        // Force write config.json if missing
+        const fs = await import('node:fs')
+        const path = await import('node:path')
+
+        // Safety check for output dir
+        if (!nitro.options.output || !nitro.options.output.dir) return;
+
+        const configPath = path.resolve(nitro.options.output.dir, 'config.json')
+
+        if (!fs.existsSync(configPath)) {
+          console.log('Manually writing .vercel/output/config.json')
+          const config = {
+            version: 3,
+            routes: [
+              { handle: 'filesystem' },
+              { src: '/.*', dest: '/' } // SPA fallback / Server handling
+            ]
+          }
+          fs.writeFileSync(configPath, JSON.stringify(config, null, 2))
+        }
+      }
+    }
   }
 })
