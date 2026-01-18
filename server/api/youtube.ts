@@ -64,11 +64,13 @@ export default defineEventHandler(async (event) => {
         setHeader(event, 'Content-Disposition', `attachment; filename="${encodeURIComponent(title)}.m4a"`)
         setHeader(event, 'Transfer-Encoding', 'chunked')
 
-        // Download best audio in M4A format (no conversion needed, widely supported)
-        // Format 140 is typically M4A audio at 128kbps
+        // Download best audio in M4A format with bot detection bypass
         const args = [
             url,
             '-f', '140/bestaudio[ext=m4a]/bestaudio',
+            '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            '--extractor-args', 'youtube:player_client=android,web',
+            '--no-check-certificates',
             '-o', '-' // Output to stdout
         ];
 
