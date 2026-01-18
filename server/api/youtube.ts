@@ -60,17 +60,15 @@ export default defineEventHandler(async (event) => {
             console.warn('Failed to fetch metadata:', e.message);
         }
 
-        setHeader(event, 'Content-Type', 'audio/mpeg')
-        setHeader(event, 'Content-Disposition', `attachment; filename="${encodeURIComponent(title)}.mp3"`)
+        setHeader(event, 'Content-Type', 'audio/mp4')
+        setHeader(event, 'Content-Disposition', `attachment; filename="${encodeURIComponent(title)}.m4a"`)
         setHeader(event, 'Transfer-Encoding', 'chunked')
 
-        // Download best audio and convert to MP3 using yt-dlp's built-in conversion
+        // Download best audio in M4A format (no conversion needed, widely supported)
+        // Format 140 is typically M4A audio at 128kbps
         const args = [
             url,
-            '-f', 'bestaudio',
-            '-x', // Extract audio
-            '--audio-format', 'mp3', // Convert to MP3
-            '--audio-quality', '0', // Best quality
+            '-f', '140/bestaudio[ext=m4a]/bestaudio',
             '-o', '-' // Output to stdout
         ];
 
