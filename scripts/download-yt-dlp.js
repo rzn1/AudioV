@@ -17,8 +17,17 @@ const download = async () => {
         // If we are on windows, we download .exe
         // If we are on linux (vercel), we download linux binary
         let binaryName = 'yt-dlp';
+        let downloadUrl = '';
+
         if (process.platform === 'win32') {
             binaryName = 'yt-dlp.exe';
+            downloadUrl = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe';
+        } else {
+            // Linux (Vercel)
+            // We MUST use the standalone binary 'yt-dlp_linux' which includes python
+            // The default 'yt-dlp' asset is just a script that requires system python
+            binaryName = 'yt-dlp';
+            downloadUrl = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux';
         }
 
         const binaryPath = path.join(binDir, binaryName);
@@ -27,24 +36,23 @@ const download = async () => {
 
         if (fs.existsSync(binaryPath)) {
             console.log('Binary already exists.');
-            // Ensure permissions anyway
             if (process.platform !== 'win32') {
                 fs.chmodSync(binaryPath, '755');
             }
-            process.exit(0); // Exit successfully if binary already exists
+            process.exit(0);
         }
 
-        console.log('Downloading yt-dlp binary...');
+        console.log(`Downloading standalone yt-dlp binary from ${downloadUrl}...`);
 
-        // Use YTDlpWrap to download
-        // @ts-ignore
-        const downloadFunc = YTDlpWrap.downloadFromGithub || (YTDlpWrap.default && YTDlpWrap.default.downloadFromGithub);
-
-        if (typeof downloadFunc !== 'function') {
-            throw new Error('Could not find downloadFromGithub function on YTDlpWrap import');
+        const res = await fetch(downloadUrl);
+        if (!res.ok) {
+            throw new Error(`Failed to download: ${res.status} ${res.statusText}`);
         }
 
-        await downloadFunc(binaryPath);
+        const arrayBuffer = await res.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+
+        fs.writeFileSync(binaryPath, buffer);
         console.log('Download complete.');
 
         // Ensure executable permissions
@@ -56,7 +64,7 @@ const download = async () => {
 
     } catch (e) {
         console.error('Failed to download yt-dlp:', e);
-        process.exit(0); // Exit 0 to not break build, but log error
+        process.exit(1);
     }
 };
 
