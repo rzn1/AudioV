@@ -24,5 +24,7 @@ logs
 !.env.example
 
 # Binaries
-bin/
+# Binaries
 *.exe
+*.exe.stackdump
+public/bin/

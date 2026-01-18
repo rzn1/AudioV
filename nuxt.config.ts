@@ -14,17 +14,4 @@ export default defineNuxtConfig({
   tres: {
     devtools: true,
   },
-
-  nitro: {
-    preset: 'vercel',
-    scanDirs: ['server'],
-    // We do NOT ignore bin here, because we want to explicitly include it
-    // But scanDirs handles the JS scanning.
-    vercel: {
-      functions: {
-        maxDuration: 60,
-        includeFiles: ['bin/**']
-      }
-    }
-  }
 })
