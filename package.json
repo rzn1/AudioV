@@ -6,10 +6,10 @@
     "build": "nuxt build",
     "dev": "nuxt dev",
     "generate": "nuxt generate",
-    "preview": "nuxt preview",
-    "postinstall": "node scripts/download-yt-dlp.js"
+    "preview": "nuxt preview"
   },
   "dependencies": {
+    "@distube/ytdl-core": "^4.16.12",
     "@nuxt/ui": "^4.0.1",
     "@pinia/nuxt": "^0.11.2",
     "@tresjs/cientos": "^3.9.0",
@@ -21,6 +21,8 @@
     "music-tempo": "^1.0.3",
     "nuxt": "^4.1.2",
     "pinia": "^3.0.3",
+    "play-dl": "^1.9.7",
+    "soundcloud-downloader": "^1.0.0",
     "three": "^0.165.0",
     "vue": "^3.4.27",
     "vue-router": "^4.3.2",

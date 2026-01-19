@@ -17,7 +17,7 @@ export const usePlayerStore = defineStore("player", {
     analyser: null as AudioAnalyser | null,
     trackList: [] as File[],
     audioBuffers: [] as Tracks[],
-    isStarted: false,
+    isPlaying: false,
     timerId: null as any,
     activeSources: [] as AudioBufferSourceNode[],
     eqNodes: [] as BiquadFilterNode[],
@@ -181,15 +181,21 @@ export const usePlayerStore = defineStore("player", {
 
       // Bass: Focus on sub/kick (Bins 0-2 ~0-500Hz)
       // We want the average of the loudest parts
-      for (let i = 0; i < 3; i++) bass += data[i];
+      for (let i = 0; i < 3; i++) {
+        if (data[i] !== undefined) bass += data[i]!;
+      }
       bass /= 3;
 
       // Mid: Vocals/Snare (Bins 3-20 ~500-3.5k)
-      for (let i = 3; i < 20; i++) mid += data[i];
+      for (let i = 3; i < 20; i++) {
+        if (data[i] !== undefined) mid += data[i]!;
+      }
       mid /= 17;
 
       // High: Hats/Air (Bins 20-100)
-      for (let i = 20; i < 100; i++) high += data[i];
+      for (let i = 20; i < 100; i++) {
+        if (data[i] !== undefined) high += data[i]!;
+      }
       high /= 80;
 
       return {
@@ -217,43 +223,43 @@ export const usePlayerStore = defineStore("player", {
       for (const res of newTracks) {
         this.processingState.current++;
         try {
-            const arrayBuffer = await res.arrayBuffer();
-            const buffer = await audioCtx.decodeAudioData(arrayBuffer);
-    
-            // Prepare data for worker
-            const channelData = buffer.getChannelData(0);
-    
-            // Promisify worker response
-            const analysis = await new Promise<any>((resolve, reject) => {
-              const id = Math.random().toString(36).substring(7);
-              const handler = (e: MessageEvent) => {
-                if (e.data.id === id) {
-                  worker.removeEventListener('message', handler);
-                  if (e.data.success) resolve(e.data);
-                  else reject(e.data.error);
-                }
-              };
-              worker.addEventListener('message', handler);
-              worker.postMessage({
-                id,
-                channelData: channelData, // Cloned
-                sampleRate: buffer.sampleRate
-              });
+          const arrayBuffer = await res.arrayBuffer();
+          const buffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+          // Prepare data for worker
+          const channelData = buffer.getChannelData(0);
+
+          // Promisify worker response
+          const analysis = await new Promise<any>((resolve, reject) => {
+            const id = Math.random().toString(36).substring(7);
+            const handler = (e: MessageEvent) => {
+              if (e.data.id === id) {
+                worker.removeEventListener('message', handler);
+                if (e.data.success) resolve(e.data);
+                else reject(e.data.error);
+              }
+            };
+            worker.addEventListener('message', handler);
+            worker.postMessage({
+              id,
+              channelData: channelData, // Cloned
+              sampleRate: buffer.sampleRate
             });
-    
-            this.audioBuffers.push({
-              buffer,
-              bpm: analysis.bpm,
-              rmsValues: analysis.rmsValues,
-              startPoint: analysis.startPoint,
-              endPoint: analysis.endPoint,
-              vibe: this.determineVibe(analysis.bpm, analysis.energy, analysis.brightness)
-            });
-            
-            // Add to track list only after successful processing
-            this.trackList.push(res);
+          });
+
+          this.audioBuffers.push({
+            buffer,
+            bpm: analysis.bpm,
+            rmsValues: analysis.rmsValues,
+            startPoint: analysis.startPoint,
+            endPoint: analysis.endPoint,
+            vibe: this.determineVibe(analysis.bpm, analysis.energy, analysis.brightness)
+          });
+
+          // Add to track list only after successful processing
+          this.trackList.push(res);
         } catch (e) {
-            console.error("Error adding track:", res.name, e);
+          console.error("Error adding track:", res.name, e);
         }
 
         // Give the UI a breather to render the progress bar and prevent freezing
@@ -266,27 +272,52 @@ export const usePlayerStore = defineStore("player", {
     determineVibe(bpm: number, energy: number, brightness: number): any {
       console.log(`[VibeCheck] BPM: ${bpm}, Energy: ${energy?.toFixed(3)}, Brightness: ${brightness?.toFixed(3)}`);
 
-      // 1. RAGE: High BPM + High Energy
-      if (bpm > 135 && energy > 0.3) {
-        return { name: 'Rage', colorA: '#ff2929', colorB: '#ffaa00', speed: 2.5, intensity: 0.25 };
+      // 1. RAGE (Hardcore, Metal, High-Energy EDM) - Adjusted to be less dizzying
+      if (bpm > 145 && energy > 0.3) {
+        return { name: 'Rage', colorA: '#FF0000', colorB: '#FFA500', speed: 2.0, intensity: 0.32 };
       }
 
-      // 2. CHILL: Low BPM + Low Energy
-      if (bpm < 100 && energy < 0.15) {
-        return { name: 'Chill', colorA: '#00d2ff', colorB: '#3a7bd5', speed: 0.5, intensity: 0.1 };
+      // 2. TECHNO (Fast, rhythmic, darker tones)
+      if (bpm > 125 && energy > 0.18 && brightness < 0.12) {
+        return { name: 'Techno', colorA: '#00ff41', colorB: '#000000', speed: 1.6, intensity: 0.22 };
       }
 
-      // 3. DARK/DEEP: Low Brightness (Bass heavy)
+      // 3. CYBERPUNK / NEON (Synthwave, Hyperpop)
+      if (brightness > 0.25) {
+        return { name: 'Neon', colorA: '#FF00FF', colorB: '#00FFFF', speed: 1.4, intensity: 0.2 };
+      }
+
+      // 4. PHONK / GRIM (Dark, bass heavy, aggressive)
+      if (energy > 0.22 && brightness < 0.08) {
+        return { name: 'Grim', colorA: '#4b0082', colorB: '#ff0000', speed: 1.2, intensity: 0.28 };
+      }
+
+      // 5. DEEP / ATMOSPHERIC (Deep House, Dark Ambient)
       if (brightness < 0.05) {
-        return { name: 'Deep', colorA: '#0f0c29', colorB: '#302b63', speed: 0.8, intensity: 0.2 };
+        return { name: 'Deep', colorA: '#0f0c29', colorB: '#302b63', speed: 0.8, intensity: 0.18 };
       }
 
-      // 4. POP/HAPPY: High Brightness
+      // 6. TROPICAL / SUNSET (Reggae, Summer Vibes)
+      if (bpm > 90 && bpm < 115 && energy > 0.15) {
+        return { name: 'Sunset', colorA: '#f83600', colorB: '#f9d423', speed: 1.0, intensity: 0.15 };
+      }
+
+      // 7. LO-FI / CHILL (Acoustic, Study Beats) - Sped up from 0.4
+      if (bpm < 95 && energy < 0.15) {
+        return { name: 'Chill', colorA: '#74EBD5', colorB: '#9FACE6', speed: 0.7, intensity: 0.1 };
+      }
+
+      // 8. POP / GLOSS (High energy, bright pop)
       if (brightness > 0.15) {
-        return { name: 'Pop', colorA: '#FF0099', colorB: '#493240', speed: 1.2, intensity: 0.18 };
+        return { name: 'Gloss', colorA: '#FF0099', colorB: '#493240', speed: 1.3, intensity: 0.18 };
       }
 
-      // Default
+      // 9. MINIMAL (Clean, low activity) - Sped up from 0.3
+      if (energy < 0.08) {
+        return { name: 'Minimal', colorA: '#bdc3c7', colorB: '#2c3e50', speed: 0.6, intensity: 0.1 };
+      }
+
+      // Default: NEUTRAL
       return { name: 'Neutral', colorA: '#3f3089', colorB: '#00bcff', speed: 1.0, intensity: 0.15 };
     },
 
@@ -296,10 +327,10 @@ export const usePlayerStore = defineStore("player", {
       if (from === to) return;
 
       const track = this.trackList.splice(from, 1)[0];
-      this.trackList.splice(to, 0, track);
+      if (track) this.trackList.splice(to, 0, track);
 
       const buffer = this.audioBuffers.splice(from, 1)[0];
-      this.audioBuffers.splice(to, 0, buffer);
+      if (buffer) this.audioBuffers.splice(to, 0, buffer);
 
       // Update current track index if needed
       if (this.currentTrack.index === from) {
@@ -311,6 +342,45 @@ export const usePlayerStore = defineStore("player", {
       }
     },
 
+    clearQueue() {
+      this.stop();
+      this.trackList = [];
+      this.audioBuffers = [];
+      this.currentTrack = {
+        index: -1,
+        startTime: 0,
+        duration: 0,
+        bufferStart: 0,
+        startPoint: 0,
+        endPoint: 0,
+        fileDuration: 0,
+        bpm: 0,
+        rmsData: []
+      };
+    },
+
+    removeTrack(index: number) {
+      if (index === this.currentTrack.index) {
+        this.stop();
+        this.currentTrack = {
+          index: -1,
+          startTime: 0,
+          duration: 0,
+          bufferStart: 0,
+          startPoint: 0,
+          endPoint: 0,
+          fileDuration: 0,
+          bpm: 0,
+          rmsData: []
+        };
+      } else if (index < this.currentTrack.index) {
+        this.currentTrack.index--;
+      }
+
+      this.trackList.splice(index, 1);
+      this.audioBuffers.splice(index, 1);
+    },
+
     stop() {
       if (this.timerId) clearTimeout(this.timerId);
 
@@ -318,6 +388,7 @@ export const usePlayerStore = defineStore("player", {
         try { source.stop(); } catch (e) { }
       });
       this.activeSources = [];
+      this.isPlaying = false;
     },
 
     seek(progress: number) {
@@ -335,11 +406,11 @@ export const usePlayerStore = defineStore("player", {
 
       // Reschedule current track
       const source = audioCtx.createBufferSource();
-      source.buffer = buffer.buffer;
+      if (buffer) source.buffer = buffer.buffer;
 
       const gain = audioCtx.createGain();
       source.connect(gain);
-      gain.connect(this.eqInput || masterGain);
+      gain.connect(this.eqInput || masterGain!);
 
       source.start(when, offset);
       source.stop(when + remainingDuration);
@@ -372,6 +443,7 @@ export const usePlayerStore = defineStore("player", {
       };
 
       // Queue next tracks
+      this.isPlaying = true;
       this.queueNext(trackData.index, reconstructedTrackData);
     },
 
@@ -385,6 +457,7 @@ export const usePlayerStore = defineStore("player", {
       // activeSources handling is inside scheduleTrack now
 
       // Kick off the chain
+      this.isPlaying = true;
       this.queueNext(index, track);
     },
 
@@ -478,7 +551,8 @@ export const usePlayerStore = defineStore("player", {
         }
 
         // Start Transition State
-        const fromName = this.trackList[activeIndex].name?.replace(/\.[^/.]+$/, "") || "Track";
+        const nextTrackFile = this.trackList[nextIndex];
+        const fromName = this.trackList[activeIndex]?.name?.replace(/\.[^/.]+$/, "") || "Track";
         this.transitionState = { active: true, fromName };
 
         // Clear transition state after fade
@@ -522,7 +596,7 @@ export const usePlayerStore = defineStore("player", {
     startPlayer() {
       if (this.audioBuffers.length === 0 || !audioCtx) return;
       this.stop();
-      this.isStarted = true;
+      this.isPlaying = true;
       const firstTrack = this.scheduleTrack(0, audioCtx.currentTime);
       // activeSource tracked in scheduleTrack
       this.queueNext(0, firstTrack);

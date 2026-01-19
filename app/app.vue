@@ -35,10 +35,10 @@ onMounted(async () => {
   function animate() {
     if (audioCtx.value && player.analyser) {
       player.updateCurrentTime(audioCtx.value.currentTime);
-      
+
       // Vibe Targets
       const vibe = player.currentTrack.vibe || { colorA: '#3f3089', colorB: '#00bcff', speed: 1.0 };
-      
+
       // Dynamic Transition Speed based on Crossfade setting
       // If fade is 10s, we want slow lerp.
       // Formula: 0.05 / (duration || 1) -> 5s fade = 0.01 lerp.
@@ -46,34 +46,35 @@ onMounted(async () => {
       const lerpSpeed = 0.06 / (fadeTime + 1); // +1 prevents div by zero and smoothing
 
       if (player.isVibeAuto) {
-          // Colors
-          targetColorA.set(vibe.colorA);
-          targetColorB.set(vibe.colorB);
-          
-          currentColorA.lerp(targetColorA, lerpSpeed);
-          currentColorB.lerp(targetColorB, lerpSpeed);
-          
-          // Apply to uniforms
-          uniforms.value.u_color_a.value = '#' + currentColorA.getHexString();
-          uniforms.value.u_color_b.value = '#' + currentColorB.getHexString();
-          // Speed - Static (User requested)
-          // uniforms.value.u_speed.value = lerp(uniforms.value.u_speed.value, vibe.speed, lerpSpeed);
+        // Colors
+        targetColorA.set(vibe.colorA);
+        targetColorB.set(vibe.colorB);
+
+        currentColorA.lerp(targetColorA, lerpSpeed);
+        currentColorB.lerp(targetColorB, lerpSpeed);
+
+        // Apply to uniforms
+        uniforms.value.u_color_a.value = '#' + currentColorA.getHexString();
+        uniforms.value.u_color_b.value = '#' + currentColorB.getHexString();
+
+        // Smoothly transition speed
+        uniforms.value.u_speed.value = lerp(uniforms.value.u_speed.value, vibe.speed, lerpSpeed);
       }
-      
-      
-      
+
+
+
       // Get Bounded Frequency Data
       const { bass, high } = player.getFrequencyData();
       const avg = player.analyser.getAverageFrequency();
-      
-      
+
+
       // Drive Uniforms
       // Squared bass for punch, scaled for new shader math
-      uniforms.value.u_bass.value = bass * bass; 
+      uniforms.value.u_bass.value = bass * bass;
       uniforms.value.u_high.value = player.isFlashEnabled ? high : 0; // Flash toggle
-      
-      // Use Average Frequency for smooth "liquid" waves
-      uniforms.value.u_intensity.value = (avg / 255) * 0.5;
+
+      // Use Average Frequency multiplied by Vibe intensity for dynamic scaling
+      uniforms.value.u_intensity.value = (avg / 255) * (vibe.intensity || 0.15) * 4.0;
 
       uniforms.value.u_time.value = clock.getElapsedTime();
     }
@@ -88,12 +89,10 @@ onMounted(async () => {
   <UApp>
 
     <Overflow />
-    
-    <TrackTitle 
-      :key="`${player.trackList[player.currentTrack.index]?.name || 'empty'}-${player.currentTrack.index}`"
-      :text="(player.trackList[player.currentTrack.index]?.name?.replace(/\.[^/.]+$/, '') || '').toUpperCase()" 
-      :visible="(player.currentTime - player.currentTrack.startTime) < 8"
-    />
+
+    <TrackTitle :key="`${player.trackList[player.currentTrack.index]?.name || 'empty'}-${player.currentTrack.index}`"
+      :text="(player.trackList[player.currentTrack.index]?.name?.replace(/\.[^/.]+$/, '') || '').toUpperCase()"
+      :visible="(player.currentTime - player.currentTrack.startTime) < 8" />
 
     <TresCanvas window-size :antialias="true" :alpha="true" :transparent="false" clearColor="#000000"
       :output-encoding="SRGBColorSpace">

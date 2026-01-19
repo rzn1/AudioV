@@ -1,8 +1,13 @@
 import { defineEventHandler, getQuery, setHeader, createError } from 'h3'
-import { spawn } from 'node:child_process'
-import path from 'node:path'
-import fs from 'node:fs'
-import os from 'node:os'
+
+// Updated list of public Invidious instances
+const INVIDIOUS_INSTANCES = [
+    'https://inv.tux.pizza',
+    'https://invidious.fdn.fr',
+    'https://invidious.protokolla.fi',
+    'https://iv.nboeck.de',
+    'https://invidious.privacydev.net'
+]
 
 export default defineEventHandler(async (event) => {
     const query = getQuery(event)
@@ -13,105 +18,87 @@ export default defineEventHandler(async (event) => {
     }
 
     try {
-        // Locate binary
-        let filename = process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp'
-        let binaryPath = path.join(process.cwd(), 'public', 'bin', filename)
+        // Extract video ID from URL
+        const videoIdMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/)
+        if (!videoIdMatch) {
+            throw createError({ statusCode: 400, statusMessage: 'Invalid YouTube URL format' })
+        }
+        const videoId = videoIdMatch[1]
 
-        if (!fs.existsSync(binaryPath)) {
-            const tmpPath = path.join(process.platform === 'win32' ? os.tmpdir() : '/tmp', filename);
-            if (fs.existsSync(tmpPath)) {
-                binaryPath = tmpPath;
-            } else {
-                console.log('Binary not found locally. Downloading from public assets...');
-                const host = event.node.req.headers['host'];
-                const protocol = event.node.req.headers['x-forwarded-proto'] || 'http';
-                const downloadUrl = `${protocol}://${host}/bin/${filename}`;
+        const errors: string[] = []
 
-                console.log(`Downloading from ${downloadUrl} to ${tmpPath}`);
+        // Try each Invidious instance until one works
+        for (const instance of INVIDIOUS_INSTANCES) {
+            try {
+                console.log(`Trying Invidious instance: ${instance}`)
 
-                const res = await fetch(downloadUrl);
-                if (!res.ok) {
-                    throw new Error(`Failed to download binary from ${downloadUrl}: ${res.statusText}`);
+                // Get video info from Invidious API
+                const infoResponse = await fetch(`${instance}/api/v1/videos/${videoId}`, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    },
+                    signal: AbortSignal.timeout(10000) // 10 second timeout
+                })
+
+                if (!infoResponse.ok) {
+                    const errorText = await infoResponse.text().catch(() => 'Unknown error')
+                    errors.push(`${instance}: HTTP ${infoResponse.status} - ${errorText.substring(0, 100)}`)
+                    continue
                 }
 
-                const arrayBuffer = await res.arrayBuffer();
-                const buffer = Buffer.from(arrayBuffer);
+                const info = await infoResponse.json()
+                console.log('Got video info:', info.title)
 
-                fs.writeFileSync(tmpPath, buffer);
-                if (process.platform !== 'win32') {
-                    fs.chmodSync(tmpPath, '755');
+                // Find best audio format
+                const audioFormat = info.adaptiveFormats
+                    ?.filter((f: any) => f.type?.includes('audio'))
+                    ?.sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0))[0]
+
+                if (!audioFormat || !audioFormat.url) {
+                    errors.push(`${instance}: No audio format found`)
+                    continue
                 }
-                binaryPath = tmpPath;
-                console.log('Binary downloaded and saved to ' + binaryPath);
+
+                console.log('Found audio format:', audioFormat.type, audioFormat.bitrate)
+
+                // Set headers
+                const title = info.title?.replace(/[^\w\s-]/gi, '') || 'YouTube Audio'
+                const contentType = audioFormat.type || 'audio/webm'
+                const extension = contentType.includes('mp4') ? 'm4a' : 'webm'
+
+                setHeader(event, 'Content-Type', contentType)
+                setHeader(event, 'Content-Disposition', `attachment; filename="${encodeURIComponent(title)}.${extension}"`)
+
+                // Fetch and stream the audio
+                console.log('Fetching audio stream from:', audioFormat.url.substring(0, 50) + '...')
+                const audioResponse = await fetch(audioFormat.url, {
+                    signal: AbortSignal.timeout(30000) // 30 second timeout
+                })
+
+                if (!audioResponse.ok || !audioResponse.body) {
+                    errors.push(`${instance}: Failed to fetch audio (${audioResponse.status})`)
+                    continue
+                }
+
+                console.log('Streaming audio...')
+                return audioResponse.body
+
+            } catch (e: any) {
+                errors.push(`${instance}: ${e.message}`)
+                console.warn(`Instance ${instance} failed:`, e.message)
+                continue
             }
         }
 
-        // Get Title
-        let title = 'YouTube Audio'
-        try {
-            const metadataProcess = spawn(binaryPath, [url, '--dump-json']);
-            let data = '';
-            for await (const chunk of metadataProcess.stdout) {
-                data += chunk;
-            }
-            const json = JSON.parse(data);
-            title = json.title.replace(/[^\w\s-]/gi, '');
-        } catch (e: any) {
-            console.warn('Failed to fetch metadata:', e.message);
-        }
-
-        setHeader(event, 'Content-Type', 'audio/mp4')
-        setHeader(event, 'Content-Disposition', `attachment; filename="${encodeURIComponent(title)}.m4a"`)
-        setHeader(event, 'Transfer-Encoding', 'chunked')
-
-        // Download best audio in M4A format with bot detection bypass
-        const args = [
-            url,
-            '-f', '140/bestaudio[ext=m4a]/bestaudio',
-            '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            '--extractor-args', 'youtube:player_client=android,web',
-            '--no-check-certificates',
-            '-o', '-' // Output to stdout
-        ];
-
-        const ytDlpProcess = spawn(binaryPath, args);
-
-        let stderrOutput = '';
-        ytDlpProcess.stderr.on('data', (data) => {
-            const msg = data.toString();
-            stderrOutput += msg;
-            console.log(`yt-dlp stderr: ${msg}`);
-        });
-
-        ytDlpProcess.on('close', (code) => {
-            if (code !== 0) {
-                console.error(`yt-dlp exited with code ${code}`);
-                console.error(`Full stderr output: ${stderrOutput}`);
-            }
-        });
-
-        ytDlpProcess.on('error', (err) => {
-            console.error('Failed to start yt-dlp subprocess:', err);
-            throw createError({ statusCode: 500, statusMessage: 'Failed to start download process: ' + err.message })
-        });
-
-        // Check if stdout is actually producing data
-        let hasData = false;
-        ytDlpProcess.stdout.on('data', () => {
-            if (!hasData) {
-                hasData = true;
-                console.log('yt-dlp stdout: receiving audio data...');
-            }
-        });
-
-        ytDlpProcess.stdout.on('end', () => {
-            console.log('yt-dlp stdout: stream ended');
-        });
-
-        return ytDlpProcess.stdout;
+        // All instances failed - return detailed error
+        console.error('All Invidious instances failed:', errors)
+        throw new Error(`All instances failed:\n${errors.join('\n')}`)
 
     } catch (e: any) {
         console.error('YouTube Proxy Error:', e)
-        throw createError({ statusCode: 500, statusMessage: e.message || 'Failed to process audio' })
+        throw createError({
+            statusCode: 500,
+            statusMessage: e.message || 'Failed to process audio'
+        })
     }
 })
