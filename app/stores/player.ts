@@ -1,7 +1,6 @@
 import { defineStore } from "pinia";
 import { markRaw } from "vue";
-// @ts-ignore
-import MusicTempo from 'music-tempo';
+import { analyze, guess } from "web-audio-beat-detector";
 import Meyda from "meyda";
 import type { CurrentTrack, Tracks } from "@/types/types";
 import { Audio, AudioAnalyser, AudioListener, AudioContext } from "three";
@@ -32,7 +31,9 @@ export const usePlayerStore = defineStore("player", {
       endPoint: 0,
       fileDuration: 0,
       bpm: 0,
-      rmsData: []
+      beatOffset: 0,
+      key: "",
+      rmsData: [] as number[]
     } as CurrentTrack,
 
     fadeDuration: 4,
@@ -60,7 +61,8 @@ export const usePlayerStore = defineStore("player", {
       u_color_a: { value: "#3f3089" },
       u_color_b: { value: "#00bcff" },
       u_bass: { value: 0.0 },
-      u_high: { value: 0.0 }
+      u_high: { value: 0.0 },
+      u_beat: { value: 0.0 }
     }
   }),
 
@@ -247,13 +249,26 @@ export const usePlayerStore = defineStore("player", {
             });
           });
 
+          // BPM & Beat Offset Detection using web-audio-beat-detector (more accurate)
+          let bpm = 0;
+          let beatOffset = 0;
+          try {
+            const result = await guess(buffer);
+            bpm = result.bpm;
+            beatOffset = result.offset;
+          } catch (bpmErr) {
+            console.warn("BPM Detection failed, falling back to worker or 0", bpmErr);
+            bpm = analysis.bpm || 0;
+          }
+
           this.audioBuffers.push({
             buffer,
-            bpm: analysis.bpm,
+            bpm: Math.round(bpm),
+            beatOffset: beatOffset,
             rmsValues: analysis.rmsValues,
             startPoint: analysis.startPoint,
             endPoint: analysis.endPoint,
-            vibe: this.determineVibe(analysis.bpm, analysis.energy, analysis.brightness)
+            vibe: this.determineVibe(bpm, analysis.energy, analysis.brightness)
           });
 
           // Add to track list only after successful processing
@@ -355,8 +370,10 @@ export const usePlayerStore = defineStore("player", {
         endPoint: 0,
         fileDuration: 0,
         bpm: 0,
-        rmsData: []
-      };
+        beatOffset: 0,
+        key: "",
+        rmsData: [] as number[]
+      } as CurrentTrack;
     },
 
     removeTrack(index: number) {
@@ -371,7 +388,8 @@ export const usePlayerStore = defineStore("player", {
           endPoint: 0,
           fileDuration: 0,
           bpm: 0,
-          rmsData: []
+          beatOffset: 0,
+          rmsData: [] as number[]
         };
       } else if (index < this.currentTrack.index) {
         this.currentTrack.index--;
@@ -432,12 +450,16 @@ export const usePlayerStore = defineStore("player", {
       const reconstructedTrackData = {
         source,
         gain,
+        hpf: null, // Seeked track won't have the transition sweep but shouldn't crash
+        lpf: null,
         startPoint: trackData.bufferStart,
         endPoint: trackData.endPoint,
         playDuration: trackData.duration,
         rmsValues: trackData.rmsData,
-        startTime: this.currentTrack.startTime, // Should be this updated time
+        startTime: this.currentTrack.startTime,
         bpm: trackData.bpm,
+        beatOffset: trackData.beatOffset,
+        key: trackData.key,
         fileDuration: trackData.fileDuration,
         vibe: trackData.vibe
       };
@@ -496,7 +518,19 @@ export const usePlayerStore = defineStore("player", {
       };
 
       const gain = audioCtx.createGain();
-      source.connect(gain);
+
+      // Individual filters for transitions
+      const hpf = audioCtx.createBiquadFilter();
+      hpf.type = 'highpass';
+      hpf.frequency.value = 10; // Start subsonic
+
+      const lpf = audioCtx.createBiquadFilter();
+      lpf.type = 'lowpass';
+      lpf.frequency.value = 22000; // Start ultrasonic
+
+      source.connect(hpf);
+      hpf.connect(lpf);
+      lpf.connect(gain);
       gain.connect(this.eqInput || masterGain);
 
       source.start(when, startPoint);
@@ -506,8 +540,9 @@ export const usePlayerStore = defineStore("player", {
 
       const fileDuration = buffer.duration;
       const vibe = bufferData.vibe;
+      const beatOffset = bufferData.beatOffset;
 
-      return { source, gain, startPoint, endPoint, playDuration, rmsValues: allRmsValues, startTime: when, bpm: currentBPM, fileDuration, vibe };
+      return { source, gain, hpf, lpf, startPoint, endPoint, playDuration, rmsValues: allRmsValues, startTime: when, bpm: currentBPM, beatOffset, fileDuration, vibe };
     },
 
     queueNext(index: number, trackData: any) {
@@ -525,6 +560,8 @@ export const usePlayerStore = defineStore("player", {
         duration: trackData.playDuration,
         bufferStart: trackData.startPoint,
         bpm: trackData.bpm,
+        beatOffset: trackData.beatOffset,
+        key: trackData.key,
         startPoint: trackData.startPoint,
         endPoint: trackData.endPoint,
         fileDuration: trackData.fileDuration,
@@ -532,7 +569,26 @@ export const usePlayerStore = defineStore("player", {
         vibe: vibe
       });
 
-      const nextStartTime = trackData.startTime + (trackData.playDuration - this.fadeOutDuration);
+      // --- Beat Aligned Start Time ---
+      const bpmA = trackData.bpm;
+      const beatIntervalA = 60 / (bpmA || 120);
+      const targetNextStartTime = trackData.startTime + (trackData.playDuration - this.fadeOutDuration);
+
+      // Calculate beats from start of track A
+      const elapsedSinceFirstBeatA = targetNextStartTime - (trackData.startTime + trackData.beatOffset);
+      const beatCountA = Math.round(elapsedSinceFirstBeatA / beatIntervalA);
+
+      // The moment where a beat occurs in track A
+      const alignedBeatTimeA = trackData.startTime + trackData.beatOffset + (beatCountA * beatIntervalA);
+
+      // We want the NEXT track's first beat (beatOffsetB) to align with this beat of A
+      // Wait, let's look at the next track data
+      const nextIndex = index + 1;
+      const bufferDataB = this.audioBuffers[nextIndex];
+      const beatOffsetB = bufferDataB?.beatOffset || 0;
+
+      // Adjust nextStartTime so beatOffsetB lands on alignedBeatTimeA
+      const nextStartTime = alignedBeatTimeA - beatOffsetB;
 
       const now = audioCtx!.currentTime;
       let delay = nextStartTime - now;
@@ -567,15 +623,26 @@ export const usePlayerStore = defineStore("player", {
         console.log(`[QueueNext] Actual AudioCtx Time: ${audioCtx!.currentTime.toFixed(3)}`);
         console.log(`[QueueNext] Diff (Delay): ${(audioCtx!.currentTime - nextStartTime).toFixed(3)}s`);
 
-        // Output old track mix
+        // Output old track mix (Fading Out)
         try {
           trackData.gain.gain.setValueAtTime(1, nextStartTime);
           trackData.gain.gain.linearRampToValueAtTime(0, nextStartTime + this.fadeOutDuration);
+
+          // Smoother Transition: High-Pass sweep on outgoing track
+          if (trackData.hpf) {
+            trackData.hpf.frequency.setValueAtTime(10, nextStartTime);
+            trackData.hpf.frequency.exponentialRampToValueAtTime(1000, nextStartTime + this.fadeOutDuration);
+          }
+
         } catch (e) { console.warn("Gain auto error", e); }
 
-        // Input new track mix
-        nextTrack.gain.gain.linearRampToValueAtTime(0, nextStartTime);
+        // Input new track mix (Fading In)
+        nextTrack.gain.gain.setValueAtTime(0, nextStartTime);
         nextTrack.gain.gain.linearRampToValueAtTime(1, nextStartTime + this.fadeDuration);
+
+        // Bass Swap: Incoming track starts without bass, then kicks in
+        nextTrack.hpf.frequency.setValueAtTime(400, nextStartTime);
+        nextTrack.hpf.frequency.exponentialRampToValueAtTime(10, nextStartTime + this.fadeDuration);
 
         // Pitch match
         let playbackRate = 1;
@@ -583,6 +650,7 @@ export const usePlayerStore = defineStore("player", {
           if (trackData.bpm > 0 && nextTrack.bpm > 0) {
             playbackRate = nextTrack.bpm / trackData.bpm;
           }
+          // Slide old track to match new track's BPM during fade
           trackData.source.playbackRate.setValueAtTime(1, nextStartTime);
           trackData.source.playbackRate.linearRampToValueAtTime(playbackRate, nextStartTime + this.fadeOutDuration);
         } catch (e) { }

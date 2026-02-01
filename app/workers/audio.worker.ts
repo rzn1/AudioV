@@ -1,39 +1,20 @@
-// @ts-ignore
-import MusicTempo from 'music-tempo';
-
 self.onmessage = (e) => {
     const { id, channelData, sampleRate } = e.data;
 
     try {
-        // 1. BPM Detection
-        // music-tempo expects one channel info
-        // We assume channelData is Float32Array
-        let bpm = 0;
-        try {
-            // MusicTempo might need a regular array or Float32Array, usually checks constructor
-            // It seems to expect an array-like. 
-            // We'll pass it directly.
-            const mt = new MusicTempo(channelData);
-            bpm = parseFloat(mt.tempo);
-        } catch (err) {
-            console.error("Worker BPM Error:", err);
-        }
-
-        // 2. RMS Calculation
+        // 1. RMS Calculation
         const rmsValues = getRMSCurve(channelData);
         const avgEnergy = rmsValues.reduce((a, b) => a + b, 0) / (rmsValues.length || 1);
 
-        // 3. Brightness (Zero Crossing Rate) represents higher frequencies
+        // 2. Brightness (Zero Crossing Rate) represents higher frequencies
         const brightness = getZeroCrossingRate(channelData);
 
-        // 4. Find Points (Simple threshold logic)
-        // We can duplicate the logic here to save main thread
+        // 3. Find Points (Simple threshold logic)
         const { startPoint, endPoint } = findPoints(rmsValues, sampleRate, channelData.length);
 
         self.postMessage({
             id,
             success: true,
-            bpm: Math.round(bpm),
             rmsValues,
             energy: avgEnergy,
             brightness: brightness,

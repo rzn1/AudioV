@@ -24,7 +24,8 @@ const props = defineProps({
         value: "#00bcff"
       },
       u_bass: { value: 0.0 },
-      u_high: { value: 0.0 }
+      u_high: { value: 0.0 },
+      u_beat: { value: 0.0 }
     }
   }
 });
@@ -129,8 +130,8 @@ vec3 mod289(vec3 x)
   uniform float u_speed;
   uniform float u_intensity;
   uniform float u_bass;
-  uniform float u_high;
   uniform float u_partical_size;
+  uniform float u_beat;
   uniform vec3 u_color_a;
   varying vec2 v_uv;
   varying float v_displacement;
@@ -139,14 +140,19 @@ vec3 mod289(vec3 x)
     v_uv = uv;
     v_displacement = cnoise(position + vec3(u_time * u_speed));
     
-    // Use intensity + bass for punch
-    float distort = u_intensity + (u_bass * 0.5);
+    // Every beat pulse - super sharp decay (20.0) so it feels snappy
+    float pulse = exp(-u_beat * 20.0); 
+    float distort = u_intensity + (u_bass * 0.4) + (pulse * 0.15);
     
     v_displacement = v_displacement * distort;
     
     // Fix: Displace along the normal (radial direction)
     // Since it's a sphere centered at 0, normalize(position) gives the normal.
     vec3 newPos = position + (normalize(position) * v_displacement);
+    
+    // Pulsing overall size on beat (subtle)
+    newPos *= 1.0 + (pulse * 0.02);
+
     vec4 modelPosition = modelMatrix * vec4(newPos, 1.0);
     vec4 viewPosition = viewMatrix * modelPosition;
     vec4 projectedPosition = projectionMatrix * viewPosition;
@@ -157,8 +163,8 @@ vec3 mod289(vec3 x)
 `
 
 const fragmentShader = `
-uniform float u_time;
 uniform float u_high;
+uniform float u_beat;
   uniform vec3 u_color_a;
   uniform vec3 u_color_b;
   varying vec2 v_uv;
@@ -171,8 +177,11 @@ uniform float u_high;
 
     vec3 color = mix(u_color_a, u_color_b, clamp(v_displacement, 0.0, 1.0));
     
-    // Highs boost the brightness of the EXISTING color (preserving hue)
-    // instead of washing it out with white
+    // Pulse color brightness on beat (super sharp)
+    float pulse = exp(-u_beat * 30.0);
+    color += color * (pulse * 0.25);
+
+    // Highs boost the brightness
     color += color * (u_high * 2.5);
     
     color = mix(vec3(0.0), color, strength);
@@ -187,26 +196,26 @@ uniform float u_high;
 const geometry = new IcosahedronGeometry(4, 25);
 
 const material = new ShaderMaterial({
-  blending: AdditiveBlending, 
+  blending: AdditiveBlending,
   uniforms: {
     ...props.uniforms,
     u_color_a: { value: new Color(props.uniforms.u_color_a.value) },
     u_color_b: { value: new Color(props.uniforms.u_color_b.value) },
   },
-  fragmentShader: fragmentShader, 
-  vertexShader: vertexShader, 
-  depthWrite: false 
+  fragmentShader: fragmentShader,
+  vertexShader: vertexShader,
+  depthWrite: false
 })
 const dot = new Points(geometry, material);
 dot.renderOrder = 1;
 
 watch(() => props.uniforms.u_color_a.value, (newValue) => {
-  console.log("Sphere Color A update:", newValue);
+  //console.log("Sphere Color A update:", newValue);
   material.uniforms.u_color_a.value = new Color(newValue);
 });
 
 watch(() => props.uniforms.u_color_b.value, (newValue) => {
-  console.log("Sphere Color B update:", newValue);
+  //console.log("Sphere Color B update:", newValue);
   material.uniforms.u_color_b.value = new Color(newValue);
 });
 
@@ -227,6 +236,10 @@ watch(() => props.uniforms.u_bass.value, (newValue) => {
 
 watch(() => props.uniforms.u_high.value, (newValue) => {
   material.uniforms.u_high.value = newValue;
+});
+
+watch(() => props.uniforms.u_beat.value, (newValue) => {
+  material.uniforms.u_beat.value = newValue;
 });
 
 </script>

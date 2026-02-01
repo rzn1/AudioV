@@ -14,6 +14,8 @@ export interface CurrentTrack {
     endPoint: number,
     fileDuration?: number,
     bpm: number,
+    beatOffset: number,
+    key?: string,
     vibe?: Vibe,
     rmsData: number[]
 }
@@ -24,6 +26,8 @@ export interface Tracks {
     rmsValues: number[],
     startPoint: number,
     endPoint: number,
+    beatOffset: number,
+    key?: string,
     energy?: number,
     brightness?: number,
     vibe?: Vibe

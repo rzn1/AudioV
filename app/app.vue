@@ -76,6 +76,20 @@ onMounted(async () => {
       // Use Average Frequency multiplied by Vibe intensity for dynamic scaling
       uniforms.value.u_intensity.value = (avg / 255) * (vibe.intensity || 0.15) * 4.0;
 
+      // --- Beat Sync ---
+      const bpm = player.currentTrack.bpm || 120;
+      const beatInterval = 60 / bpm;
+      const startTime = player.currentTrack.startTime;
+      const beatOffset = player.currentTrack.beatOffset || 0;
+
+      const elapsed = audioCtx.value.currentTime - (startTime + beatOffset);
+      if (elapsed > 0) {
+        // Sawtooth wave: 0.0 to 1.0 within the BEAT
+        uniforms.value.u_beat.value = (elapsed % beatInterval) / beatInterval;
+      } else {
+        uniforms.value.u_beat.value = 0;
+      }
+
       uniforms.value.u_time.value = clock.getElapsedTime();
     }
 
