@@ -1,16 +1,46 @@
+import {
+    computeOnsetEnvelope, fitBeatGrid, detectDownbeatPhase, detectKey, describeKey, chooseMixPoints, meanRms, PHRASE_BEATS
+} from '../utils/audioAnalysis';
+
+const RMS_HOP = 2048;
+
 self.onmessage = (e) => {
-    const { id, channelData, sampleRate } = e.data;
+    const { id, channelData, sampleRate, tempoGuess } = e.data;
 
     try {
         // 1. RMS Calculation
-        const rmsValues = getRMSCurve(channelData);
+        const rmsValues = getRMSCurve(channelData, RMS_HOP);
         const avgEnergy = rmsValues.reduce((a, b) => a + b, 0) / (rmsValues.length || 1);
 
         // 2. Brightness (Zero Crossing Rate) represents higher frequencies
         const brightness = getZeroCrossingRate(channelData);
 
-        // 3. Find Points (Simple threshold logic)
-        const { startPoint, endPoint } = findPoints(rmsValues, sampleRate, channelData.length);
+        // 3. Raw (energy based) start / end points
+        const raw = findPoints(rmsValues, sampleRate, channelData.length);
+
+        // 4. Beat grid: fit an exact constant-tempo grid (the library only returns an integer BPM), then find bars
+        const env = computeOnsetEnvelope(channelData, sampleRate);
+        const grid = fitBeatGrid(env.onset, env.rate, tempoGuess || 0);
+        const beat = 60 / grid.tempo;
+        const down = detectDownbeatPhase(env, grid.tempo, grid.offset);
+        const firstDownbeat = grid.offset + down.phase * beat;
+
+        // 5. Phrase-aligned mix-in / mix-out points, on beat grids fitted locally at those two spots (the tempo of
+        //    many tracks wanders, so the global grid is only trusted for bar counting)
+        const duration = channelData.length / sampleRate;
+        const { mixIn, mixOut, tempoIn, tempoOut } = chooseMixPoints(
+            channelData, sampleRate,
+            { tempo: grid.tempo, offset: grid.offset, phase: down.phase, firstDownbeat },
+            { start: raw.startPoint, end: raw.bodyEnd }, duration
+        );
+        const hopSec = RMS_HOP / sampleRate;
+        const span = PHRASE_BEATS * 2 * beat;
+        const introEnergy = meanRms(rmsValues, hopSec, mixIn, mixIn + span);
+        const outroEnergy = meanRms(rmsValues, hopSec, mixOut - span, mixOut);
+
+        // 6. Musical key
+        const k = detectKey(channelData, sampleRate);
+        const key = { ...k, ...describeKey(k) };
 
         self.postMessage({
             id,
@@ -18,8 +48,19 @@ self.onmessage = (e) => {
             rmsValues,
             energy: avgEnergy,
             brightness: brightness,
-            startPoint,
-            endPoint
+            startPoint: mixIn,
+            endPoint: mixOut,
+            mixIn,
+            mixOut,
+            tempoIn,
+            tempoOut,
+            tempo: grid.tempo,
+            beatOffset: grid.offset,
+            firstDownbeat,
+            downbeatConfidence: down.confidence,
+            introEnergy,
+            outroEnergy,
+            key
         });
     } catch (error: any) {
         self.postMessage({ id, success: false, error: error.message });
@@ -112,6 +153,9 @@ function findPoints(rmsValues: number[], sampleRate: number, totalSamples: numbe
         }
     }
 
+    // Where the loud body of the track ends. The auto-DJ mixes out around here, while the track is still strong.
+    const bodyEnd = (endIndex * hopSize) / sampleRate;
+
     // Add a natural fade-out tail (e.g. 10 seconds of "outro" allowed)
     // This prevents cutting the song abruptly when the energy drops.
     const tailSeconds = 10;
@@ -120,6 +164,7 @@ function findPoints(rmsValues: number[], sampleRate: number, totalSamples: numbe
 
     return {
         startPoint: (startIndex * hopSize) / sampleRate,
-        endPoint: (endIndex * hopSize) / sampleRate
+        endPoint: (endIndex * hopSize) / sampleRate,
+        bodyEnd
     };
 }

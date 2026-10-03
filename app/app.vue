@@ -25,6 +25,7 @@ const cameraPosition = new Vector3(0, 0, 40);
 // --- Animation loop ---
 onMounted(async () => {
   player.init();
+  player.restoreQueue(); // bring back the queue saved by the previous session
 
   // Persistent Color Objects (Avoids re-parsing strings every frame)
   const currentColorA = new Color(uniforms.value.u_color_a.value);
@@ -77,18 +78,8 @@ onMounted(async () => {
       uniforms.value.u_intensity.value = (avg / 255) * (vibe.intensity || 0.15) * 4.0;
 
       // --- Beat Sync ---
-      const bpm = player.currentTrack.bpm || 120;
-      const beatInterval = 60 / bpm;
-      const startTime = player.currentTrack.startTime;
-      const beatOffset = player.currentTrack.beatOffset || 0;
-
-      const elapsed = audioCtx.value.currentTime - (startTime + beatOffset);
-      if (elapsed > 0) {
-        // Sawtooth wave: 0.0 to 1.0 within the BEAT
-        uniforms.value.u_beat.value = (elapsed % beatInterval) / beatInterval;
-      } else {
-        uniforms.value.u_beat.value = 0;
-      }
+      // Sawtooth wave: 0.0 to 1.0 within the BEAT (follows the file position, so tempo-matching is respected)
+      uniforms.value.u_beat.value = player.getBeatPhase();
 
       uniforms.value.u_time.value = clock.getElapsedTime();
     }

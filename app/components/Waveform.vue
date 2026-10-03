@@ -104,12 +104,10 @@ function drawWaveform(rmsValues: number[], progress = 0) {
 
     if (track.startPoint) drawMarker(track.startPoint, '#bef264'); // Lime-300
 
-    // Mix-Out Marker (Transition Start)
-    const fadeOut = player.fadeOutDuration || 3;
-    if (track.endPoint && track.endPoint > fadeOut) {
-      const mixOutPoint = track.endPoint - fadeOut;
-
-      const ratio = mixOutPoint / track.fileDuration;
+    // Mix-Out Marker (planned transition start, phrase-aligned)
+    const upcoming = player.upcomingTransition;
+    if (upcoming && upcoming.startPos > 0) {
+      const ratio = upcoming.startPos / track.fileDuration;
       const x = ratio * width;
 
       ctx.save();

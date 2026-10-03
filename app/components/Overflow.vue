@@ -193,16 +193,49 @@
                                             <span class="text-xs uppercase tracking-widest font-bold">Automix</span>
                                         </div>
                                         <div class="grid grid-cols-2 gap-4">
-                                            <UFormField label="Fade In (s)"
+                                            <UFormField label="Max Blend (beats)"
                                                 :ui="{ label: 'text-[10px] uppercase font-bold text-gray-500' }">
-                                                <UInputNumber v-model="player.fadeDuration" size="sm" :min="0" :max="30"
-                                                    class="font-mono" />
+                                                <UInputNumber v-model="player.maxTransitionBeats" size="sm" :min="8"
+                                                    :max="64" :step="8" class="font-mono" />
                                             </UFormField>
-                                            <UFormField label="Fade Out (s)"
+                                            <UFormField label="Mix-out lead (s)"
                                                 :ui="{ label: 'text-[10px] uppercase font-bold text-gray-500' }">
-                                                <UInputNumber v-model="player.fadeOutDuration" size="sm" :min="0"
-                                                    :max="30" class="font-mono" />
+                                                <UInputNumber v-model="player.mixLead" size="sm" :min="0" :max="24"
+                                                    :step="4" class="font-mono" />
                                             </UFormField>
+                                            <div class="col-span-2">
+                                                <UButton @click="previewNextMix" :loading="isPreviewing"
+                                                    :disabled="!player.upcomingTransition" icon="i-heroicons-play"
+                                                    label="Preview next mix" color="neutral" variant="soft" size="xs"
+                                                    block />
+                                            </div>
+                                        </div>
+
+                                        <!-- Next transition plan -->
+                                        <div v-if="player.upcomingTransition"
+                                            class="mt-4 pt-3 border-t border-white/5 text-[10px] font-mono text-gray-400 space-y-1">
+                                            <div class="flex justify-between">
+                                                <span class="text-gray-500 uppercase font-bold">Next mix</span>
+                                                <span class="text-primary-400 font-bold uppercase">
+                                                    {{ player.upcomingTransition.style }} ·
+                                                    {{ player.upcomingTransition.beats }} beats ·
+                                                    {{ player.upcomingTransition.length.toFixed(1) }}s
+                                                </span>
+                                            </div>
+                                            <div class="flex justify-between">
+                                                <span class="text-gray-500">MATCH</span>
+                                                <span>
+                                                    {{ Math.round(player.upcomingTransition.score * 100) }}%
+                                                    (BPM {{ Math.round(player.upcomingTransition.parts.bpm * 100) }} ·
+                                                    KEY {{ Math.round(player.upcomingTransition.parts.key * 100) }})
+                                                </span>
+                                            </div>
+                                            <div class="flex justify-between"
+                                                v-if="Math.abs(player.upcomingTransition.rate - 1) > 0.001">
+                                                <span class="text-gray-500">TEMPO SHIFT</span>
+                                                <span>{{ ((player.upcomingTransition.rate - 1) * 100).toFixed(1)
+                                                    }}%</span>
+                                            </div>
                                         </div>
                                     </div>
 
@@ -298,8 +331,13 @@
                                             player.trackList.length }}
                                         </UBadge>
                                     </div>
-                                    <UButton icon="i-heroicons-trash" color="neutral" variant="ghost" size="xs"
-                                        v-if="player.trackList.length > 0" @click="player.clearQueue()" />
+                                    <div class="flex items-center gap-1">
+                                        <UButton icon="i-heroicons-sparkles" label="Auto-order" color="primary"
+                                            variant="ghost" size="xs" v-if="player.trackList.length > 2"
+                                            @click="player.autoOrder()" />
+                                        <UButton icon="i-heroicons-trash" color="neutral" variant="ghost" size="xs"
+                                            v-if="player.trackList.length > 0" @click="player.clearQueue()" />
+                                    </div>
                                 </div>
 
                                 <!-- Track List -->
@@ -364,6 +402,13 @@
                                                     v-if="player.audioBuffers[index]?.vibe">
                                                     <span>{{ player.audioBuffers[index].bpm }} BPM</span>
                                                     <span class="w-0.5 h-0.5 rounded-full bg-gray-600"></span>
+                                                    <span
+                                                        v-if="player.audioBuffers[index].key && player.audioBuffers[index].key.confidence >= 0.35"
+                                                        :title="player.audioBuffers[index].key.name">{{
+                                                            player.audioBuffers[index].key.camelot }}</span>
+                                                    <span
+                                                        v-if="player.audioBuffers[index].key && player.audioBuffers[index].key.confidence >= 0.35"
+                                                        class="w-0.5 h-0.5 rounded-full bg-gray-600"></span>
                                                     <span class="font-bold tracking-wider"
                                                         :style="{ color: player.audioBuffers[index].vibe.colorA }">
                                                         {{ player.audioBuffers[index].vibe.name.toUpperCase() }}
@@ -487,6 +532,29 @@ const uploadState = ref(false);
 const volume = ref(player.audioVolume);
 const streamUrl = ref('');
 const isDownloading = ref(false);
+const isPreviewing = ref(false);
+
+// Renders the planned transition into the next track offline, plays it and reports how even the loudness was.
+async function previewNextMix() {
+    isPreviewing.value = true;
+    try {
+        const result = await player.previewTransition();
+        if (!result) return;
+        const { plan, rendered, metrics } = result;
+        player.playBuffer(rendered);
+        toast.add({
+            title: `Preview: ${plan.style} over ${plan.beats} beats`,
+            description: `Loudness dip ${metrics.dipDb.toFixed(1)} dB, bump +${metrics.bumpDb.toFixed(1)} dB, peak ${metrics.peak.toFixed(2)}`,
+            icon: 'i-heroicons-play',
+            // peak is measured before the master limiter, so it is informational only
+            color: metrics.dipDb < -6 || metrics.bumpDb > 4 ? 'warning' : 'primary'
+        });
+    } catch (e: any) {
+        toast.add({ title: 'Preview failed', description: e?.message || String(e), color: 'red' });
+    } finally {
+        isPreviewing.value = false;
+    }
+}
 
 watch(volume, (newVolume) => {
     player.setAudioVolume(newVolume);

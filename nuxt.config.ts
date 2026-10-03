@@ -11,6 +11,12 @@ export default defineNuxtConfig({
     }
   },
 
+  // Listen on all interfaces so the dev server is reachable from other machines on the LAN
+  devServer: {
+    host: '0.0.0.0',
+    port: 3000
+  },
+
   tres: {
     devtools: true,
   },
