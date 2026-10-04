@@ -1,10 +1,13 @@
 import { defineEventHandler, getQuery, setHeader, createError } from 'h3'
 import scdl from 'soundcloud-downloader'
-import { importEnabled } from '../utils/access'
+import { importEnabled, clientId, isSoundCloudHost } from '../utils/access'
+import { limit } from '../utils/cloud'
 
 export default defineEventHandler(async (event) => {
-    // Off in production unless ENABLE_URL_IMPORT=1 (see youtube.ts)
+    // On everywhere by default; set DISABLE_URL_IMPORT=1 to switch the downloaders off
     if (!importEnabled()) throw createError({ statusCode: 404, statusMessage: 'Not found' })
+    // Generous per-visitor cap so a public deployment cannot be used as a bulk downloader
+    limit(`import:${clientId(event)}`, 30, 10 * 60_000)
 
     const query = getQuery(event)
     const url = query.url as string
@@ -12,18 +15,15 @@ export default defineEventHandler(async (event) => {
     if (!url) {
         throw createError({ statusCode: 400, statusMessage: 'Invalid URL' })
     }
+    // The hostname must really be SoundCloud (a plain `includes('soundcloud.com')` accepted any URL containing it)
+    if (!isSoundCloudHost(url)) {
+        throw createError({ statusCode: 400, statusMessage: 'Invalid SoundCloud URL' })
+    }
 
     try {
         // Use any to bypass restrictive typing if necessary
         const s: any = scdl;
         const lib = s.default || s;
-
-        // Simple regex check as fallback if validateURL isn't there
-        const isSoundCloudUrl = url.includes('soundcloud.com');
-
-        if (!isSoundCloudUrl) {
-            throw createError({ statusCode: 400, statusMessage: 'Invalid SoundCloud URL' })
-        }
 
         // Get track info
         const info = await lib.getInfo(url)

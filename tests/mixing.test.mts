@@ -4,7 +4,7 @@ import {
     computeOnsetEnvelope, fitBeatGrid, detectDownbeatPhase, detectKey, describeKey, fitLocalGrid, chooseMixPoints, snapMixPoints
 } from '../app/utils/audioAnalysis.ts';
 import { keyPalette, hueDistance, hashString } from '../app/utils/palette.ts';
-import { accessMode, importEnabled, codesMatch } from '../server/utils/access.ts';
+import { accessMode, importEnabled, codesMatch, isSoundCloudHost } from '../server/utils/access.ts';
 import { retryAfterSeconds, sanitizeMessage, pcmToWav, isWav } from '../server/utils/http.ts';
 import { buildDeepgramTts, deepgramHeaders, DEEPGRAM_VOICES, DEFAULT_DEEPGRAM_VOICE } from '../server/utils/deepgram.ts';
 import { buildWordingRequest, parseWordingResponse, splitVersions, WORDING_SYSTEM } from '../server/utils/wording.ts';
@@ -278,7 +278,7 @@ test('dj cloud: the stronger model may be warmer, but still no claims, numbers o
 
 test('access: open locally, locked in production without a code, constant-time code check', () => {
     const saved = { ...process.env };
-    const env = (e: Record<string, string | undefined>) => { for (const k of ['NODE_ENV', 'DJ_ACCESS_CODE', 'DJ_ALLOW_OPEN', 'ENABLE_URL_IMPORT']) delete process.env[k]; Object.assign(process.env, e); };
+    const env = (e: Record<string, string | undefined>) => { for (const k of ['NODE_ENV', 'DJ_ACCESS_CODE', 'DJ_ALLOW_OPEN', 'DISABLE_URL_IMPORT']) delete process.env[k]; Object.assign(process.env, e); };
     try {
         env({ NODE_ENV: 'development' });
         assert.equal(accessMode(), 'open');
@@ -286,9 +286,9 @@ test('access: open locally, locked in production without a code, constant-time c
 
         env({ NODE_ENV: 'production' });
         assert.equal(accessMode(), 'locked', 'public deployments are locked unless a code is configured');
-        assert.equal(importEnabled(), false, 'the downloader routes are off in production');
-        env({ NODE_ENV: 'production', ENABLE_URL_IMPORT: '1' });
-        assert.equal(importEnabled(), true);
+        assert.equal(importEnabled(), true, 'the SoundCloud / YouTube import stays on in production');
+        env({ NODE_ENV: 'production', DISABLE_URL_IMPORT: '1' });
+        assert.equal(importEnabled(), false, 'unless it is explicitly switched off');
         env({ NODE_ENV: 'production', DJ_ALLOW_OPEN: '1' });
         assert.equal(accessMode(), 'open');
 
@@ -305,6 +305,15 @@ test('access: open locally, locked in production without a code, constant-time c
     assert.equal(codesMatch('S3CRET-CODE', 's3cret-code'), false);
     assert.equal(codesMatch('', 's3cret-code'), false);
     assert.equal(codesMatch('anything', ''), false, 'an empty expected code never matches');
+});
+
+test('soundcloud import: only real SoundCloud hostnames are accepted', () => {
+    for (const ok of ['https://soundcloud.com/artist/track', 'https://m.soundcloud.com/artist/track', 'https://on.soundcloud.com/AbCdEf', 'http://snd.sc/xyz', 'https://SoundCloud.com/a/b?si=1']) {
+        assert.equal(isSoundCloudHost(ok), true, ok);
+    }
+    for (const bad of ['https://evil.com/?soundcloud.com', 'https://soundcloud.com.evil.com/x', 'https://notsoundcloud.com/x', 'soundcloud.com/artist/track', '', 'javascript:alert(1)']) {
+        assert.equal(isSoundCloudHost(bad), false, bad);
+    }
 });
 
 test('cloud helpers: Deepgram request, wording request, WAV wrapping, retry hints, secret scrubbing', () => {

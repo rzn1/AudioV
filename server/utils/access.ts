@@ -10,8 +10,18 @@ import { timingSafeEqual } from 'node:crypto';
 
 export const isProd = () => process.env.NODE_ENV === 'production';
 export const accessCode = () => process.env.DJ_ACCESS_CODE || '';
-/** The YouTube / SoundCloud downloader routes only run locally unless explicitly enabled (they do not work on Vercel). */
-export const importEnabled = () => !isProd() || process.env.ENABLE_URL_IMPORT === '1';
+/** The YouTube / SoundCloud downloader routes are on unless DISABLE_URL_IMPORT=1. */
+export const importEnabled = () => process.env.DISABLE_URL_IMPORT !== '1';
+
+/** True when the URL's hostname really is SoundCloud (soundcloud.com, any subdomain such as on.soundcloud.com, snd.sc). */
+export function isSoundCloudHost(url: string): boolean {
+    try {
+        const host = new URL(url).hostname.toLowerCase();
+        return host === 'soundcloud.com' || host.endsWith('.soundcloud.com') || host === 'snd.sc';
+    } catch (e) {
+        return false;
+    }
+}
 
 export type AccessMode = 'open' | 'code' | 'locked';
 

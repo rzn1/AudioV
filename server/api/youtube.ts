@@ -1,5 +1,6 @@
 import { defineEventHandler, getQuery, setHeader, createError } from 'h3'
-import { importEnabled } from '../utils/access'
+import { importEnabled, clientId } from '../utils/access'
+import { limit } from '../utils/cloud'
 
 // Updated list of public Invidious instances
 const INVIDIOUS_INSTANCES = [
@@ -11,9 +12,10 @@ const INVIDIOUS_INSTANCES = [
 ]
 
 export default defineEventHandler(async (event) => {
-    // Off in production unless ENABLE_URL_IMPORT=1: it streams whole files through a function and YouTube blocks
-    // datacenter addresses, so it does not work on Vercel (and an open downloader proxy is a liability)
+    // On everywhere by default; set DISABLE_URL_IMPORT=1 to switch the downloaders off
     if (!importEnabled()) throw createError({ statusCode: 404, statusMessage: 'Not found' })
+    // Generous per-visitor cap so a public deployment cannot be used as a bulk downloader
+    limit(`import:${clientId(event)}`, 30, 10 * 60_000)
 
     const query = getQuery(event)
     const url = query.url as string
