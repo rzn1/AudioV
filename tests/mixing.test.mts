@@ -3,6 +3,11 @@ import assert from 'node:assert/strict';
 import {
     computeOnsetEnvelope, fitBeatGrid, detectDownbeatPhase, detectKey, describeKey, fitLocalGrid, chooseMixPoints, snapMixPoints
 } from '../app/utils/audioAnalysis.ts';
+import { keyPalette, hueDistance, hashString } from '../app/utils/palette.ts';
+import { retryAfterSeconds, sanitizeMessage, pcmToWav, isWav } from '../server/utils/http.ts';
+import { buildDeepgramTts, deepgramHeaders, DEEPGRAM_VOICES, DEFAULT_DEEPGRAM_VOICE } from '../server/utils/deepgram.ts';
+import { buildWordingRequest, parseWordingResponse, splitVersions, WORDING_SYSTEM } from '../server/utils/wording.ts';
+import { isValidCloudSkeleton, parseTrackName, tidyName, sayTrack, SKELETONS, rolesConsistent, isSameLine, cleanLine, isValidSkeleton, pickSkeleton, fillSkeleton, templateLine, buildMessages, pickSpeechStart, shouldSpeak } from '../app/utils/djScript.ts';
 import { posAt, timeAt, planTransition, fitTransition, orderTracks, keyScore, effectiveMixOut } from '../app/utils/mixPlanner.ts';
 
 const sr = 22050;
@@ -174,6 +179,136 @@ test('ordering: lowers total cost, keeps the played head, is a permutation', () 
     assert.equal(new Set(ordered).size, 12);
     assert.ok(cost(ordered) < cost(ident));
     assert.deepEqual(orderTracks(metas, 3).slice(0, 3), [0, 1, 2]);
+});
+
+test('palette: compatible keys are neighbouring hues, clashes are far apart', () => {
+    const k = (camelot: string, confidence = 0.8) => ({ root: 0, mode: camelot.endsWith('A') ? 'minor' as const : 'major' as const, confidence, camelot, name: camelot });
+    const hue = (c: string) => keyPalette(k(c))!.a[0];
+    assert.ok(Math.abs(hueDistance(hue('8A'), hue('9A')) - 1 / 12) < 1e-9, 'adjacent wheel numbers are 30 degrees apart');
+    assert.equal(hue('8A'), hue('8B'), 'relative major/minor share a hue');
+    assert.ok(hueDistance(hue('8A'), hue('2A')) > 0.45, 'opposite side of the wheel');
+    assert.equal(keyPalette(k('8A', 0.2)), null, 'unsure keys fall back to the vibe palette');
+    assert.equal(hashString('a.mp3'), hashString('a.mp3'));
+    assert.notEqual(hashString('a.mp3'), hashString('b.mp3'));
+});
+
+test('dj: track names are parsed into artist / title', () => {
+    assert.deepEqual(parseTrackName('Kendrick Lamar & SZA - luther.mp3'), { artist: 'Kendrick Lamar & SZA', title: 'luther' });
+    assert.deepEqual(parseTrackName('Trippie Redd - Death Ft. DaBaby Lyrics.mp3'), { artist: 'Trippie Redd', title: 'Death Ft. DaBaby' });
+    assert.deepEqual(parseTrackName('Artist - Song (Official Video).mp3'), { artist: 'Artist', title: 'Song' });
+    assert.deepEqual(parseTrackName('fading.mp3'), { title: 'fading' });
+    assert.deepEqual(parseTrackName('Lady Gaga, Bruno Mars - Die With A Smile.mp3'), { artist: 'Lady Gaga, Bruno Mars', title: 'Die With A Smile' });
+});
+
+test('dj: announcements are skeletons; names are filled in by code, never by the model', () => {
+    const facts = { prev: { artist: 'The Weeknd, Playboi Carti', title: 'Timeless' }, next: { artist: 'Kendrick Lamar & SZA', title: 'luther' } };
+    assert.equal(fillSkeleton('That was {prev}. Up next, {next}.', facts), 'That was Timeless by The Weeknd, Playboi Carti. Up next, luther by Kendrick Lamar and SZA.');
+    assert.equal(fillSkeleton('Keeping it going with {next}.', { ...facts, next: { title: 'Open Road' } }), 'Keeping it going with Open Road.');
+    assert.notEqual(pickSkeleton(0), pickSkeleton(0.5));
+    for (let i = 0; i < 6; i++) assert.ok(isValidSkeleton(pickSkeleton(i / 6)), 'every built-in skeleton passes its own validation');
+    assert.equal(templateLine(facts, 0), fillSkeleton(pickSkeleton(0), facts));
+    const m = buildMessages('That was {prev}. Up next, {next}.');
+    assert.equal(m[0]!.role, 'system');
+    assert.deepEqual([m.at(-1)!.role, m.at(-1)!.content], ['user', 'That was {prev}. Up next, {next}.']);
+    assert.ok(!/bpm|tempo/i.test(m.map(x => x.content).join(' ')), 'prompt never invites technical talk');
+});
+
+test('dj: names are tidied so a voice reads them like a person would', () => {
+    assert.equal(tidyName('Kendrick Lamar & SZA'), 'Kendrick Lamar and SZA');
+    assert.equal(tidyName('MY EYES'), 'My Eyes');
+    assert.equal(tidyName('Death Ft. DaBaby'), 'Death featuring DaBaby');
+    assert.equal(tidyName('SZA'), 'SZA', 'short all-caps names are acronyms and stay');
+    assert.equal(tidyName('D.A.N.C.E.'), 'D.A.N.C.E.', 'dotted acronyms stay');
+    assert.equal(tidyName('Die With A Smile'), 'Die With A Smile', 'normal titles are left alone');
+    assert.equal(tidyName('ONE-MORE TIME'), 'One-More Time');
+    assert.equal(sayTrack({ artist: 'ARTIST NAME', title: 'SOME SONG' }), 'Some Song by Artist Name');
+});
+
+test('dj: model output is cleaned and only accepted when it is plain and keeps the placeholders', () => {
+    assert.equal(cleanLine('"That was [Prev]!\nUp next, <NEXT>!!"'), 'That was {prev}. Up next, {next}.');
+    assert.ok(isValidSkeleton('You were listening to {prev}, and coming up now is {next}.'));
+    assert.ok(isValidSkeleton('Here is {next}.'));
+    assert.ok(isValidSkeleton("That was {prev}, and now it's {next}."));
+    assert.ok(!isValidSkeleton('That was {prev}.'), 'must keep {next}');
+    assert.ok(!isValidSkeleton('{next} and {next}.'), '{next} exactly once');
+    assert.ok(!isValidSkeleton('Up next, {next} at 128 BPM.'), 'no tempo talk');
+    assert.ok(!isValidSkeleton('That was {prev}, a soulful track. Up next, {next}.'), 'no claims about the music');
+    assert.ok(!isValidSkeleton('{next} sounds like it has something to do with rap tracks.'), 'no invented descriptions');
+    assert.ok(!isValidSkeleton('Up next, {next} 🎶'), 'no emoji');
+    assert.ok(!isValidSkeleton('Up next, Lutherto.'), 'a model-written name is never accepted');
+    assert.ok(isSameLine('That was {prev}.  Up next, {next}!', 'that was {prev} up next {next}'));
+});
+
+test('dj: the two songs keep their roles (what already played is never "up next")', () => {
+    // real outputs of the small model
+    assert.ok(!isValidSkeleton("{prev} is up next, and here's {next}."), 'previous song announced as upcoming');
+    assert.ok(!isValidSkeleton('{next} was great, then {prev}.'), 'upcoming song in the past tense');
+    assert.ok(!isValidSkeleton('I was listening to {prev}. Now, {next}.'), 'first person');
+    assert.ok(!isValidSkeleton("Alright, that was {prev}. And now we're {next}."), "we're {next} is not a sentence");
+    assert.ok(isValidSkeleton("That was {prev}, and now it's {next}."), "it's {next} is fine");
+    assert.ok(isValidSkeleton('Okay, {next} is up next, after {prev}.'));
+    assert.ok(isValidSkeleton('{prev} just finished, and here comes {next}.'));
+    assert.ok(isValidSkeleton('Alright, that was {prev}. Moving on to {next}.'));
+    assert.ok(isValidSkeleton('That was {prev}. Now, {next}.'));
+    for (const s of SKELETONS) assert.ok(rolesConsistent(s), `built-in skeleton keeps roles: ${s}`);
+});
+
+test('dj: speech timing sits inside the transition and respects the clock', () => {
+    const base = { bStart: 100, transitionEnd: 140, now: 50 };
+    assert.equal(pickSpeechStart({ ...base, duration: 5 }), 110);
+    assert.ok(pickSpeechStart({ ...base, duration: 60 }) >= 100, 'long clip starts as early as the incoming track');
+    assert.equal(pickSpeechStart({ ...base, duration: 5, now: 120 }), 120.3, 'never in the past');
+    assert.deepEqual([1, 2, 3, 4].map(n => shouldSpeak(n, 2)), [false, true, false, true]);
+    assert.ok([1, 2, 3].every(n => shouldSpeak(n, 1)));
+});
+
+test('dj cloud: the stronger model may be warmer, but still no claims, numbers or technical talk', () => {
+    assert.ok(isValidCloudSkeleton("Alright, that was {prev}. Let's keep the evening going with {next}."));
+    assert.ok(isValidCloudSkeleton('That was {prev}, and next up, something a little different: {next}.'));
+    assert.ok(isValidCloudSkeleton("Hope you enjoyed {prev}. Here's {next}."));
+    assert.ok(!isValidCloudSkeleton('That was {prev}, a legendary track. Up next, {next}.'), 'praise');
+    assert.ok(!isValidCloudSkeleton('That was {prev}. {next} was released in 2019.'), 'trivia and years');
+    assert.ok(!isValidCloudSkeleton('Up next, {next}, a real banger.'), 'opinion');
+    assert.ok(!isValidCloudSkeleton('Up next at 128 BPM, {next}.'), 'technical talk');
+    assert.ok(!isValidCloudSkeleton('That was {prev}.'), 'must keep {next}');
+    assert.ok(!isValidCloudSkeleton('{prev} is up next, then {next}.'), 'roles swapped');
+    assert.ok(!isValidCloudSkeleton("And now we're {next}."), "we're {next}");
+});
+
+test('cloud helpers: Deepgram request, wording request, WAV wrapping, retry hints, secret scrubbing', () => {
+    const dg = buildDeepgramTts('https://api.example.test', 'aura-2-cora-en', 'Hello there.');
+    assert.equal(dg.url, 'https://api.example.test/v1/speak?model=aura-2-cora-en&encoding=linear16&container=wav&sample_rate=24000');
+    assert.deepEqual(dg.body, { text: 'Hello there.' });
+    assert.ok(buildDeepgramTts('https://x', 'not-a-voice', 'Hi').url.includes('model=' + DEFAULT_DEEPGRAM_VOICE), 'unknown voices fall back to the default');
+    assert.deepEqual(deepgramHeaders('abc'), { authorization: 'Token abc' });
+    assert.ok(DEEPGRAM_VOICES.some(v => v.value === DEFAULT_DEEPGRAM_VOICE));
+
+    const w = buildWordingRequest('https://api.example.test/openai/v1', 'm', 'That was {prev}. Up next, {next}.', ['a recent line']);
+    assert.equal(w.url, 'https://api.example.test/openai/v1/chat/completions');
+    assert.equal(w.body.messages[0]!.role, 'system');
+    assert.match(w.body.messages[1]!.content, /That was \{prev\}/);
+    assert.match(w.body.messages[1]!.content, /recent line/);
+    assert.match(WORDING_SYSTEM, /\{prev\}/);
+    assert.deepEqual(splitVersions('1. First one.\n2) Second one.\n- Third one.\n\n'), ['First one.', 'Second one.', 'Third one.']);
+    assert.deepEqual(parseWordingResponse({ choices: [{ message: { content: 'One.\nTwo.' } }, { message: { content: 'Three.' } }] }), ['One.', 'Two.', 'Three.']);
+    assert.deepEqual(parseWordingResponse({}), []);
+
+    const pcm = Uint8Array.from({ length: 4800 }, (_, k) => (k * 7) % 256);
+    const wav = pcmToWav(pcm, 24000);
+    assert.ok(isWav(wav) && !isWav(pcm));
+    assert.equal(String.fromCharCode(...wav.slice(8, 12)), 'WAVE');
+    assert.equal(new DataView(wav.buffer).getUint32(24, true), 24000, 'sample rate');
+    assert.equal(new DataView(wav.buffer).getUint32(40, true), pcm.length, 'data length');
+
+    const hdr = (v: string | null) => ({ get: () => v });
+    assert.equal(retryAfterSeconds(200, hdr('5')), 0);
+    assert.equal(retryAfterSeconds(429, hdr('12')), 12);
+    assert.equal(retryAfterSeconds(429, hdr(null)), 60);
+
+    assert.equal(sanitizeMessage('bad key sk-live-123456789 rejected', ['sk-live-123456789']), 'bad key … rejected');
+    assert.ok(!sanitizeMessage('Authorization: Bearer abcdefghijklmnop1234').includes('abcdefghijklmnop1234'));
+    assert.ok(!sanitizeMessage('url?api_key=SECRETSECRET&x=1').includes('SECRETSECRET'));
+    assert.ok(sanitizeMessage('x'.repeat(500)).length <= 200);
 });
 
 console.log(`\n${passed} tests passed`);

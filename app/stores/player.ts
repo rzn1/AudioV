@@ -1,18 +1,28 @@
 import { defineStore } from "pinia";
 import { markRaw } from "vue";
 import { guess } from "web-audio-beat-detector";
-import type { AnalysisData, CurrentTrack, Tracks } from "@/types/types";
+import type { AnalysisData, CurrentTrack, KeyInfo, Tracks, Vibe } from "@/types/types";
 import { ANALYSIS_VERSION, loadSaved, saveTrack, deleteTrack, saveOrder, clearAll, newTrackId } from "~/utils/trackStore";
 import { Audio, AudioAnalyser, AudioListener, AudioContext } from "three";
 import * as THREE from "three";
 import { planTransition, fitTransition, orderTracks, posAt, toMixMeta, effectiveMixOut, echoEntryBeats } from "~/utils/mixPlanner";
-import { createVoice, applyTransition, analyzeTransition } from "~/utils/mixEngine";
+import { createVoice, applyTransition, analyzeTransition, buildVoiceChain } from "~/utils/mixEngine";
 import type { Voice, VoiceOptions } from "~/utils/mixEngine";
+import { mixHooks } from "~/utils/mixHooks";
 
 var audioCtx: AudioContext | null = null;
 var masterGain: GainNode | null = null;
 var mixBus: GainNode | null = null;
 var listener: AudioListener | null = null;
+// Separate, finer analyser just for the visualiser's spectrum (the THREE one is only 256 points wide)
+var specAnalyser: AnalyserNode | null = null;
+var specBytes: Uint8Array | null = null;
+// The AI DJ's voice: music is ducked through `duckGain`, the voice joins after it so it is never ducked itself
+var duckGain: GainNode | null = null;
+var voiceGain: GainNode | null = null;
+var voiceSource: AudioBufferSourceNode | null = null;
+var voiceChain: { input: GainNode, setPolish: (level: number) => void } | null = null;
+const DUCK_LEVEL = 0.15; // default music level under the voice, about -16 dB
 
 // Everything time-critical is scheduled on the audio clock. This small event queue is polled instead of using
 // setTimeout, so it also behaves correctly while the AudioContext is suspended (pause).
@@ -61,9 +71,16 @@ export const usePlayerStore = defineStore("player", {
     currentTime: 0,
     isVibeAuto: true,
     isFlashEnabled: true,
+    // `start`/`length` are wall-clock based (performance.now()/1000) and describe the running transition; `to*` is the
+    // incoming track (the visualiser starts morphing towards it as soon as the transition starts).
     transitionState: {
       active: false,
-      fromName: "" as string
+      fromName: "" as string,
+      toName: "" as string,
+      toKey: undefined as KeyInfo | undefined,
+      toVibe: undefined as Vibe | undefined,
+      start: 0,
+      length: 0
     },
     processingState: {
       isProcessing: false,
@@ -114,15 +131,31 @@ export const usePlayerStore = defineStore("player", {
       limiter.attack.value = 0.003;
       limiter.release.value = 0.1;
 
-      // Route MixBus -> limiter -> MasterGain (Volume Control)
-      mixBus.connect(limiter);
+      // Route MixBus -> duck -> limiter -> MasterGain (Volume Control)
+      duckGain = audioCtx.createGain();
+      mixBus.connect(duckGain);
+      duckGain.connect(limiter);
       limiter.connect(masterGain);
+
+      // The DJ voice skips the EQ, the ducking and the music limiter, shares the master volume, and gets its own
+      // broadcast-style processing (see buildVoiceChain)
+      voiceGain = audioCtx.createGain();
+      voiceGain.gain.value = 1.0;
+      const chain = buildVoiceChain(audioCtx, masterGain);
+      voiceGain.connect(chain.input);
+      voiceChain = chain;
 
       // Create Analyser
       this.analyser = new THREE.AudioAnalyser(new THREE.Audio(listener), 256);
 
       // Connect MixBus to Analyser (Visuals independent of Volume)
       mixBus.connect(this.analyser.analyser);
+
+      specAnalyser = audioCtx.createAnalyser();
+      specAnalyser.fftSize = 2048;
+      specAnalyser.smoothingTimeConstant = 0.7;
+      specBytes = new Uint8Array(specAnalyser.frequencyBinCount);
+      mixBus.connect(specAnalyser);
 
       this.initEqualizer();
     },
@@ -208,13 +241,40 @@ export const usePlayerStore = defineStore("player", {
      * tracks drifts over the file.
      */
     getBeatPhase() {
+      return ((this.getBeatPos() % 1) + 1) % 1;
+    },
+
+    /** Continuous beat count relative to the nearer mix point (a downbeat), so `floor(x) mod 4` is the beat in the bar. */
+    getBeatPos() {
       const tr = this.currentTrack;
       if (!tr.timeline || !tr.tempoIn || !tr.tempoOut) return 0;
       const pos = this.getFilePosition();
-      const x = pos < (tr.startPoint + tr.endPoint) / 2
+      return pos < (tr.startPoint + tr.endPoint) / 2
         ? (pos - tr.startPoint) / (60 / tr.tempoIn)
         : (pos - tr.endPoint) / (60 / tr.tempoOut);
-      return ((x % 1) + 1) % 1;
+    },
+
+    /**
+     * Fills `out` (length N) with log-spaced spectrum levels 0..255 from ~40 Hz to 16 kHz, with a gentle high-frequency
+     * tilt so the top bands are visible. Returns false while there is no analyser yet.
+     */
+    getSpectrum(out: Uint8Array): boolean {
+      if (!specAnalyser || !specBytes || !audioCtx) return false;
+      specAnalyser.getByteFrequencyData(specBytes);
+      const n = out.length;
+      const binHz = audioCtx.sampleRate / specAnalyser.fftSize;
+      const lo = 40;
+      const hi = Math.min(16000, audioCtx.sampleRate / 2 - 1);
+      for (let i = 0; i < n; i++) {
+        const f0 = lo * Math.pow(hi / lo, i / n);
+        const f1 = lo * Math.pow(hi / lo, (i + 1) / n);
+        const b0 = Math.floor(f0 / binHz);
+        const b1 = Math.max(b0 + 1, Math.ceil(f1 / binHz));
+        let m = 0;
+        for (let b = b0; b < b1 && b < specBytes.length; b++) m = Math.max(m, specBytes[b]!);
+        out[i] = Math.min(255, m * (1 + (i / n) * 0.9));
+      }
+      return true;
     },
 
     getLowEnergy() {
@@ -542,8 +602,48 @@ export const usePlayerStore = defineStore("player", {
         try { source.stop(); } catch (e) { }
       });
       this.activeSources = [];
+      this.stopVoice();
       this.isPlaying = false;
-      this.transitionState = { active: false, fromName: "" };
+      this.transitionState = { ...this.transitionState, active: false, fromName: "" };
+    },
+
+    /**
+     * Plays the DJ's voice at AudioContext time `when` and ducks the music underneath it: down just before the
+     * voice starts, back up shortly after it ends. Returns the time the voice ends.
+     */
+    playVoice(buffer: AudioBuffer, when: number, duckLevel = DUCK_LEVEL, polish = 1): number | null {
+      if (!audioCtx || !voiceGain || !duckGain) return null;
+      this.stopVoice();
+      voiceChain?.setPolish(polish);
+      const end = when + buffer.duration;
+
+      const source = audioCtx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(voiceGain);
+      source.start(when);
+      voiceSource = source;
+      source.onended = () => { if (voiceSource === source) voiceSource = null; };
+
+      const g = duckGain.gain;
+      g.setValueAtTime(1, Math.max(0, when - 0.4));
+      g.linearRampToValueAtTime(duckLevel, when);
+      g.setValueAtTime(duckLevel, end);
+      g.linearRampToValueAtTime(1, end + 0.9);
+      return end;
+    },
+
+    /** Current music level set by the voice ducking (1 = untouched, ~0.15 while the DJ speaks by default). */
+    getDuckLevel(): number {
+      return duckGain ? duckGain.gain.value : 1;
+    },
+
+    stopVoice() {
+      try { voiceSource?.stop(); } catch (e) { }
+      voiceSource = null;
+      if (duckGain && audioCtx) {
+        duckGain.gain.cancelScheduledValues(audioCtx.currentTime);
+        duckGain.gain.setValueAtTime(1, audioCtx.currentTime);
+      }
     },
 
     launchVoice(index: number, when: number, pos: number, opts: VoiceOptions = {}): Voice {
@@ -588,6 +688,7 @@ export const usePlayerStore = defineStore("player", {
         rmsData: meta.rmsValues,
         timeline: { ...voice.timeline }
       });
+      mixHooks.onTrackStart?.(meta);
     },
 
     /** Starts `index` at file position `pos` and chains the automatic transitions after it. */
@@ -657,16 +758,26 @@ export const usePlayerStore = defineStore("player", {
         rate: fit.plan.rate, holdFor: T0 + length - bStart, rampDur, silent: true
       });
       applyTransition(audioCtx, fit.plan, a, b, T0, length, bStart);
+      mixHooks.onTransition?.({ a: a.meta, b: next, T0, bStart, length, now });
 
       this.at(T0, () => {
         const fromIndex = this.audioBuffers.indexOf(a.meta);
         const fromName = this.trackList[fromIndex]?.name?.replace(/\.[^/.]+$/, "") || "Track";
+        const toIndex = this.audioBuffers.indexOf(next);
         this.fadeDuration = length;
-        this.transitionState = { active: true, fromName };
+        this.transitionState = {
+          active: true,
+          fromName,
+          toName: this.trackList[toIndex]?.name ?? "",
+          toKey: next.key,
+          toVibe: next.vibe,
+          start: performance.now() / 1000,
+          length
+        };
       });
       this.at(bStart, () => this.activate(b));
       this.at(T0 + length, () => {
-        this.transitionState = { active: false, fromName: "" };
+        this.transitionState = { ...this.transitionState, active: false, fromName: "" };
       });
 
       this.queueNext(b);

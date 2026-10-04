@@ -16,24 +16,26 @@ const props = defineProps<{
 <style scoped>
 .track-title-overlay {
   position: fixed;
-  top: 50%;
+  bottom: 11%;
   left: 50%;
-  transform: translate(-50%, -50%);
+  transform: translateX(-50%);
   z-index: 100;
   pointer-events: none;
   text-align: center;
+  max-width: 86vw;
 }
 
 .track-title-text {
-  font-size: 4rem;
-  font-weight: 900;
+  display: block;
+  font-size: clamp(1.1rem, 2.6vw, 2.2rem);
+  font-weight: 800;
   color: white;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
-  text-shadow: 
-    0 0 20px rgba(255, 255, 255, 0.8),
-    0 0 40px rgba(255, 255, 255, 0.6),
-    0 0 60px rgba(255, 255, 255, 0.4);
+  letter-spacing: 0.22em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 0 18px rgba(255, 255, 255, 0.55), 0 2px 12px rgba(0, 0, 0, 0.6);
   animation: glow-pulse 2s ease-in-out infinite;
 }
 
@@ -51,10 +53,10 @@ const props = defineProps<{
 }
 .title-drop-enter-from {
   opacity: 0;
-  transform: translate(-50%, -150%);
+  transform: translate(-50%, 40%);
 }
 .title-drop-leave-to {
   opacity: 0;
-  transform: translate(-50%, 50%);
+  transform: translate(-50%, 40%);
 }
 </style>

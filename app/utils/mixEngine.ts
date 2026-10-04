@@ -165,6 +165,103 @@ export function applyTransition(ctx: BaseAudioContext, plan: TransitionPlan, a: 
     }
 }
 
+/**
+ * A short decaying-noise "room": ~1 s, brighter at the start, with a few ms of pre-delay. Cheap and good enough for the
+ * subtle ambience a radio voice has.
+ */
+function roomImpulse(ctx: BaseAudioContext, seconds = 1.0, preDelay = 0.015) {
+    const rate = ctx.sampleRate;
+    const length = Math.floor(rate * seconds);
+    const ir = ctx.createBuffer(2, length, rate);
+    for (let c = 0; c < 2; c++) {
+        const d = ir.getChannelData(c);
+        let smooth = 0;
+        for (let i = 0; i < length; i++) {
+            const t = i / rate;
+            if (t < preDelay) continue;
+            const decay = Math.pow(1 - (t - preDelay) / (seconds - preDelay), 2.6);
+            const lp = 0.35 + 0.55 * (1 - t / seconds); // darker as it decays
+            smooth += lp * ((Math.random() * 2 - 1) - smooth);
+            d[i] = smooth * decay * 0.5;
+        }
+    }
+    return ir;
+}
+
+/**
+ * "On air" processing for the DJ voice: the synthesised voice is dry, flat and a little thin, which is a big part of why
+ * it sounds read-out. High-pass to remove rumble, a touch of low warmth, presence and air on top, gentle compression so
+ * words sit evenly, a hint of room, and a limiter. Returns the node to feed; the result goes to `dest`.
+ */
+export function buildVoiceChain(ctx: BaseAudioContext, dest: AudioNode): { input: GainNode, setPolish: (level: number) => void } {
+    const input = ctx.createGain();
+
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 85;
+    hp.Q.value = 0.7;
+
+    const warmth = ctx.createBiquadFilter();
+    warmth.type = 'lowshelf';
+    warmth.frequency.value = 220;
+    warmth.gain.value = 2.5;
+
+    const presence = ctx.createBiquadFilter();
+    presence.type = 'peaking';
+    presence.frequency.value = 3200;
+    presence.Q.value = 0.9;
+    presence.gain.value = 3;
+
+    const air = ctx.createBiquadFilter();
+    air.type = 'highshelf';
+    air.frequency.value = 9000;
+    air.gain.value = 2;
+
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -26;
+    comp.knee.value = 10;
+    comp.ratio.value = 3.5;
+    comp.attack.value = 0.006;
+    comp.release.value = 0.14;
+
+    const makeup = ctx.createGain();
+    makeup.gain.value = 1.15; // ~ +1.2 dB: the compressor + EQ already lift the voice by ~5 dB (measured on real clips)
+
+    const room = ctx.createConvolver();
+    room.buffer = roomImpulse(ctx);
+    const wet = ctx.createGain();
+    wet.gain.value = 0.12;
+
+    const limiter = ctx.createDynamicsCompressor();
+    limiter.threshold.value = -5;
+    limiter.knee.value = 0;
+    limiter.ratio.value = 20;
+    limiter.attack.value = 0.002;
+    limiter.release.value = 0.08;
+
+    input.connect(hp);
+    hp.connect(warmth);
+    warmth.connect(presence);
+    presence.connect(air);
+    air.connect(comp);
+    comp.connect(makeup);
+    makeup.connect(limiter);     // dry path
+    makeup.connect(room);        // room send
+    room.connect(wet);
+    wet.connect(limiter);
+    limiter.connect(dest);
+
+    /** 1 = full processing (flat local voice); lower for voices that are already produced (the cloud voice). */
+    const setPolish = (level: number) => {
+        const p = Math.min(1, Math.max(0, level));
+        warmth.gain.value = 2.5 * p;
+        presence.gain.value = 3 * p;
+        air.gain.value = 2 * p;
+        wet.gain.value = 0.12 * p;
+    };
+    return { input, setPolish };
+}
+
 export interface TransitionMetrics {
     dipDb: number,   // quietest moment inside the transition relative to the surrounding loudness
     bumpDb: number,  // loudest moment inside the transition relative to the surrounding loudness

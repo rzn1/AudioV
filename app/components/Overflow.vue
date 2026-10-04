@@ -239,9 +239,108 @@
                                         </div>
                                     </div>
 
-                                    <!-- VISUALS SETTINGS -->
+                                    <!-- AI DJ -->
                                     <div
                                         class="bg-gray-900/60 border border-white/5 rounded-xl p-5 hover:border-white/10 transition-colors">
+                                        <div class="flex justify-between items-center mb-4">
+                                            <div class="flex items-center gap-2 text-gray-400">
+                                                <UIcon name="i-heroicons-microphone" class="w-4 h-4" />
+                                                <span class="text-xs uppercase tracking-widest font-bold">AI DJ</span>
+                                            </div>
+                                            <USwitch :model-value="dj.enabled" @update:model-value="dj.setEnabled"
+                                                color="primary" size="xs" />
+                                        </div>
+
+                                        <div v-if="!dj.enabled" class="text-[11px] text-gray-500 leading-relaxed">
+                                            A voice that announces the next song between tracks. The local engine runs
+                                            on your computer (free, offline, about 600&nbsp;MB downloaded once). The
+                                            cloud engine uses a free Gemini key for a much more natural voice.
+                                        </div>
+
+                                        <template v-else>
+                                            <div v-if="dj.status === 'loading'" class="space-y-2 mb-4">
+                                                <div class="flex justify-between text-[10px] font-mono text-gray-400">
+                                                    <span>{{ dj.stage || 'Starting…' }}</span>
+                                                    <span>{{ dj.progress }}%</span>
+                                                </div>
+                                                <UProgress :model-value="dj.progress" size="xs" color="primary" />
+                                            </div>
+                                            <div v-else-if="dj.status === 'error'"
+                                                class="text-[11px] text-red-400 mb-4 break-words">
+                                                Could not start the DJ: {{ dj.error }}
+                                                <button class="underline ml-1" @click="dj.ensureReady()">Retry</button>
+                                            </div>
+
+                                            <UFormField label="Engine" class="mb-4"
+                                                :ui="{ label: 'text-[10px] uppercase font-bold text-gray-500' }">
+                                                <USelect :model-value="dj.engine" :items="djEngines"
+                                                    @update:model-value="dj.setEngine" size="sm" class="w-full" />
+                                            </UFormField>
+                                            <p v-if="!dj.cloudAvailable"
+                                                class="text-[10px] text-gray-500 leading-relaxed -mt-2 mb-4">
+                                                Cloud voice: get a free Deepgram key ($200 credit, no card) and put it
+                                                in <span class="font-mono">.env</span> as
+                                                <span class="font-mono">DEEPGRAM_API_KEY=…</span>, then restart the dev
+                                                server.
+                                            </p>
+                                            <p v-else-if="dj.engine === 'cloud' && !dj.cloudWording"
+                                                class="text-[10px] text-gray-500 leading-relaxed -mt-2 mb-4">
+                                                Optional: a free Groq key as
+                                                <span class="font-mono">WORDING_API_KEY=…</span> in
+                                                <span class="font-mono">.env</span> gives livelier wording.
+                                            </p>
+                                            <p v-if="dj.cloudError"
+                                                class="text-[10px] text-amber-400 leading-relaxed mb-4 break-words">
+                                                Cloud: {{ dj.cloudError }}<span v-if="dj.engine === 'cloud'"> (using the
+                                                    local voice when it is set up)</span>
+                                            </p>
+
+                                            <div class="grid grid-cols-2 gap-4">
+                                                <UFormField label="Voice"
+                                                    :ui="{ label: 'text-[10px] uppercase font-bold text-gray-500' }">
+                                                    <USelect :model-value="dj.engine === 'cloud' ? dj.cloudVoice : dj.voice"
+                                                        :items="dj.engine === 'cloud' ? dj.cloudVoices : DJ_VOICES"
+                                                        @update:model-value="dj.setVoice" size="sm" class="w-full" />
+                                                </UFormField>
+                                                <UFormField label="Speaks"
+                                                    :ui="{ label: 'text-[10px] uppercase font-bold text-gray-500' }">
+                                                    <USelect :model-value="dj.every" :items="DJ_FREQUENCY"
+                                                        @update:model-value="dj.setEvery" size="sm" class="w-full" />
+                                                </UFormField>
+                                            </div>
+
+                                            <div class="mt-4 space-y-1">
+                                                <div class="flex justify-between text-[10px] uppercase font-bold text-gray-500">
+                                                    <span>Music while talking</span>
+                                                    <span class="font-mono text-gray-400">{{ Math.round(dj.duck * 100) }}%</span>
+                                                </div>
+                                                <USlider :model-value="Math.round(dj.duck * 100)"
+                                                    @update:model-value="(v: number) => dj.setDuck(v / 100)" :min="0"
+                                                    :max="60" :step="5" size="xs" color="primary" />
+                                            </div>
+
+                                            <div class="flex items-center justify-between mt-4 gap-3">
+                                                <UButton @click="dj.testVoice()"
+                                                    :loading="dj.busy || dj.status === 'loading'"
+                                                    :disabled="dj.status !== 'ready'" icon="i-heroicons-speaker-wave"
+                                                    label="Try it" color="neutral" variant="soft" size="xs" />
+                                                <span v-if="dj.status === 'ready' && !dj.llmReady"
+                                                    class="text-[10px] text-gray-500">simple lines only</span>
+                                            </div>
+
+                                            <p v-if="dj.lastLine"
+                                                class="mt-4 pt-3 border-t border-white/5 text-[11px] text-gray-300 italic leading-relaxed">
+                                                “{{ dj.lastLine }}”
+                                                <span v-if="dj.lastTiming"
+                                                    class="block not-italic font-mono text-[9px] text-gray-600 mt-1">made
+                                                    in the background: {{ dj.lastTiming }}</span>
+                                            </p>
+                                        </template>
+                                    </div>
+
+                                    <!-- VISUALS SETTINGS -->
+                                    <div
+                                        class="sm:col-span-2 bg-gray-900/60 border border-white/5 rounded-xl p-5 hover:border-white/10 transition-colors">
                                         <div class="flex justify-between items-center mb-4">
                                             <div class="flex items-center gap-2 text-gray-400">
                                                 <UIcon name="i-heroicons-eye" class="w-4 h-4" />
@@ -513,9 +612,20 @@
 
 <script setup lang="ts">
 import { usePlayerStore } from "~/stores/player";
+import { useDjStore, DJ_VOICES } from "~/stores/dj";
 const toast = useToast()
 
 const player = usePlayerStore();
+const dj = useDjStore();
+const djEngines = computed(() => [
+    { value: 'local', label: 'Local (offline, free)' },
+    { value: 'cloud', label: dj.cloudAvailable ? 'Cloud (Deepgram, natural voice)' : 'Cloud (needs an API key)', disabled: !dj.cloudAvailable }
+]);
+const DJ_FREQUENCY = [
+    { value: 1, label: 'Every song' },
+    { value: 2, label: 'Every 2nd song' },
+    { value: 3, label: 'Every 3rd song' }
+];
 const currentTrack = computed(() => player.getTrackData());
 const uniforms = computed(() => player.uniforms);
 
