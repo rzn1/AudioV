@@ -1,7 +1,11 @@
 import { defineEventHandler, getQuery, setHeader, createError } from 'h3'
 import scdl from 'soundcloud-downloader'
+import { importEnabled } from '../utils/access'
 
 export default defineEventHandler(async (event) => {
+    // Off in production unless ENABLE_URL_IMPORT=1 (see youtube.ts)
+    if (!importEnabled()) throw createError({ statusCode: 404, statusMessage: 'Not found' })
+
     const query = getQuery(event)
     const url = query.url as string
 

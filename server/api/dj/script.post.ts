@@ -1,12 +1,15 @@
 import { defineEventHandler, readBody, createError } from 'h3';
 import { buildWordingRequest, parseWordingResponse } from '../../utils/wording';
 import { wordingBase, wordingKey, wordingModel, requireKey, limit, cloudPost, failure } from '../../utils/cloud';
+import { requireAccess, clientId } from '../../utils/access';
 
 // Rewords an announcement skeleton ("That was {prev}. Up next, {next}.") in natural radio language through any
 // OpenAI-compatible model. The song names are never sent: only the placeholders, which are filled in on the client.
 export default defineEventHandler(async (event) => {
+    requireAccess(event);
     requireKey(wordingKey(), 'WORDING_API_KEY');
-    limit('script', 30);
+    limit('script', 40);
+    limit(`script:${clientId(event)}`, 10);
 
     const body = await readBody<{ skeleton?: string, avoid?: string[] }>(event);
     const skeleton = String(body?.skeleton ?? '');

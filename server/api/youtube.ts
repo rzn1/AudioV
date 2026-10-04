@@ -1,4 +1,5 @@
 import { defineEventHandler, getQuery, setHeader, createError } from 'h3'
+import { importEnabled } from '../utils/access'
 
 // Updated list of public Invidious instances
 const INVIDIOUS_INSTANCES = [
@@ -10,6 +11,10 @@ const INVIDIOUS_INSTANCES = [
 ]
 
 export default defineEventHandler(async (event) => {
+    // Off in production unless ENABLE_URL_IMPORT=1: it streams whole files through a function and YouTube blocks
+    // datacenter addresses, so it does not work on Vercel (and an open downloader proxy is a liability)
+    if (!importEnabled()) throw createError({ statusCode: 404, statusMessage: 'Not found' })
+
     const query = getQuery(event)
     const url = query.url as string
 

@@ -4,6 +4,7 @@ import {
     computeOnsetEnvelope, fitBeatGrid, detectDownbeatPhase, detectKey, describeKey, fitLocalGrid, chooseMixPoints, snapMixPoints
 } from '../app/utils/audioAnalysis.ts';
 import { keyPalette, hueDistance, hashString } from '../app/utils/palette.ts';
+import { accessMode, importEnabled, codesMatch } from '../server/utils/access.ts';
 import { retryAfterSeconds, sanitizeMessage, pcmToWav, isWav } from '../server/utils/http.ts';
 import { buildDeepgramTts, deepgramHeaders, DEEPGRAM_VOICES, DEFAULT_DEEPGRAM_VOICE } from '../server/utils/deepgram.ts';
 import { buildWordingRequest, parseWordingResponse, splitVersions, WORDING_SYSTEM } from '../server/utils/wording.ts';
@@ -273,6 +274,37 @@ test('dj cloud: the stronger model may be warmer, but still no claims, numbers o
     assert.ok(!isValidCloudSkeleton('That was {prev}.'), 'must keep {next}');
     assert.ok(!isValidCloudSkeleton('{prev} is up next, then {next}.'), 'roles swapped');
     assert.ok(!isValidCloudSkeleton("And now we're {next}."), "we're {next}");
+});
+
+test('access: open locally, locked in production without a code, constant-time code check', () => {
+    const saved = { ...process.env };
+    const env = (e: Record<string, string | undefined>) => { for (const k of ['NODE_ENV', 'DJ_ACCESS_CODE', 'DJ_ALLOW_OPEN', 'ENABLE_URL_IMPORT']) delete process.env[k]; Object.assign(process.env, e); };
+    try {
+        env({ NODE_ENV: 'development' });
+        assert.equal(accessMode(), 'open');
+        assert.equal(importEnabled(), true);
+
+        env({ NODE_ENV: 'production' });
+        assert.equal(accessMode(), 'locked', 'public deployments are locked unless a code is configured');
+        assert.equal(importEnabled(), false, 'the downloader routes are off in production');
+        env({ NODE_ENV: 'production', ENABLE_URL_IMPORT: '1' });
+        assert.equal(importEnabled(), true);
+        env({ NODE_ENV: 'production', DJ_ALLOW_OPEN: '1' });
+        assert.equal(accessMode(), 'open');
+
+        env({ NODE_ENV: 'production', DJ_ACCESS_CODE: 's3cret-code' });
+        assert.equal(accessMode(), 'code');
+        env({ NODE_ENV: 'development', DJ_ACCESS_CODE: 's3cret-code' });
+        assert.equal(accessMode(), 'code', 'a configured code is enforced even locally');
+    } finally {
+        for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
+        Object.assign(process.env, saved);
+    }
+    assert.equal(codesMatch('s3cret-code', 's3cret-code'), true);
+    assert.equal(codesMatch('s3cret-cod', 's3cret-code'), false);
+    assert.equal(codesMatch('S3CRET-CODE', 's3cret-code'), false);
+    assert.equal(codesMatch('', 's3cret-code'), false);
+    assert.equal(codesMatch('anything', ''), false, 'an empty expected code never matches');
 });
 
 test('cloud helpers: Deepgram request, wording request, WAV wrapping, retry hints, secret scrubbing', () => {

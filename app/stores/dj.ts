@@ -28,6 +28,7 @@ interface Clip {
 }
 
 const SETTINGS_KEY = 'audiov.dj';
+const CODE_KEY = 'audiov.dj.code';
 const LOCAL_OK_KEY = 'audiov.dj.localOk'; // set once the local models have been set up (so falling back needs no new download)
 
 // Not reactive on purpose: a worker, promises and audio buffers must not be wrapped in proxies
@@ -70,7 +71,12 @@ export const useDjStore = defineStore("dj", {
     enabled: false,
     every: 2,                 // speak on every n-th transition
     engine: 'local' as 'local' | 'cloud',
-    cloudAvailable: false,    // the server has a Deepgram key (the cloud voice can be used)
+    cloudAvailable: false,    // the cloud voice can be used: the server has a Deepgram key and this client is allowed
+    cloudConfigured: false,   // the server has a Deepgram key at all
+    access: 'open' as 'open' | 'code' | 'locked', // 'code': the server wants an access code; 'locked': none is configured (production)
+    authorized: true,
+    accessCode: '',           // typed by the user, kept in localStorage, sent as x-dj-code
+    importEnabled: true,      // the YouTube / SoundCloud downloader routes exist (they are off in production)
     cloudWording: false,      // the server also has a wording key (livelier lines; otherwise the built-in sentences)
     cloudVoices: [] as { value: string, label: string }[],
     cloudError: '',           // last cloud problem, shown in the UI
@@ -104,6 +110,7 @@ export const useDjStore = defineStore("dj", {
       mixHooks.onTrackStart = (meta) => this.onTrackStart(meta);
       mixHooks.onTransition = (info) => this.onTransition(info);
 
+      try { this.accessCode = localStorage.getItem(CODE_KEY) || ''; } catch (e) { }
       await this.checkCloud();
       // Nothing chosen yet: use the cloud voice when a key is configured, it is the better one
       this.engine = savedEngine === 'local' || savedEngine === 'cloud'
@@ -123,13 +130,17 @@ export const useDjStore = defineStore("dj", {
       } catch (e) { }
     },
 
-    /** Asks the server which cloud keys are configured (the keys themselves never reach the browser). */
+    /** Asks the server what the cloud engine can do (the keys themselves never reach the browser). */
     async checkCloud() {
       try {
-        const res = await fetch('/api/dj/status');
+        const res = await fetch('/api/dj/status', { headers: this.accessCode ? { 'x-dj-code': this.accessCode } : {} });
         const j = res.ok ? await res.json() : null;
-        this.cloudAvailable = !!j?.voice;
-        this.cloudWording = !!j?.wording;
+        this.cloudConfigured = !!j?.voice;
+        this.access = j?.access ?? 'open';
+        this.authorized = j?.authorized !== false;
+        this.importEnabled = j?.importEnabled !== false;
+        this.cloudAvailable = !!j?.voice && this.authorized;
+        this.cloudWording = !!j?.wording && this.authorized;
         this.cloudVoices = Array.isArray(j?.voices) ? j.voices : [];
         if (this.cloudVoices.length && !this.cloudVoices.some(v => v.value === this.cloudVoice)) {
           this.cloudVoice = j?.defaultVoice ?? this.cloudVoices[0]!.value;
@@ -137,6 +148,24 @@ export const useDjStore = defineStore("dj", {
       } catch (e) {
         this.cloudAvailable = false;
         this.cloudWording = false;
+      }
+    },
+
+    /** The user typed the access code the server asked for. */
+    async setAccessCode(code: string) {
+      this.accessCode = code.trim();
+      try { localStorage.setItem(CODE_KEY, this.accessCode); } catch (e) { }
+      cloudBackoffUntil = 0;
+      wordingBackoffUntil = 0;
+      this.cloudError = '';
+      await this.checkCloud();
+      if (this.cloudAvailable) {
+        this.engine = 'cloud';
+        this.save();
+        readyPromise = null;
+        if (this.enabled) this.ensureReady().then(() => this.warmUp()).catch(() => { });
+      } else if (this.access === 'code') {
+        this.cloudError = 'That access code was not accepted';
       }
     },
 
@@ -315,7 +344,7 @@ export const useDjStore = defineStore("dj", {
     async cloudCall(path: string, body: unknown, timeoutMs = 45000): Promise<Response> {
       const res = await fetch(path, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', ...(this.accessCode ? { 'x-dj-code': this.accessCode } : {}) },
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(timeoutMs)
       });
@@ -323,6 +352,7 @@ export const useDjStore = defineStore("dj", {
         const j = await res.json().catch(() => ({}));
         const err: any = new Error(j?.data?.message || j?.statusMessage || `${path} failed (${res.status})`);
         err.status = res.status;
+        if (res.status === 401) { this.authorized = false; this.cloudAvailable = false; } // the code was refused: ask again
         err.retryAfter = j?.data?.retryAfter ?? 0;
         throw err;
       }

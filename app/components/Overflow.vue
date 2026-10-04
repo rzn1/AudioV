@@ -276,7 +276,26 @@
                                                 <USelect :model-value="dj.engine" :items="djEngines"
                                                     @update:model-value="dj.setEngine" size="sm" class="w-full" />
                                             </UFormField>
-                                            <p v-if="!dj.cloudAvailable"
+                                            <div v-if="dj.cloudConfigured && dj.access === 'code' && !dj.authorized"
+                                                class="-mt-2 mb-4 space-y-1.5">
+                                                <p class="text-[10px] text-gray-500 leading-relaxed">
+                                                    The cloud voice needs the access code for this site.
+                                                </p>
+                                                <div class="flex gap-2">
+                                                    <UInput v-model="codeInput" type="password" size="xs"
+                                                        placeholder="Access code" class="flex-1 font-mono"
+                                                        @keyup.enter="dj.setAccessCode(codeInput)" />
+                                                    <UButton label="Unlock" size="xs" color="neutral" variant="soft"
+                                                        @click="dj.setAccessCode(codeInput)" />
+                                                </div>
+                                            </div>
+                                            <p v-else-if="dj.cloudConfigured && dj.access === 'locked'"
+                                                class="text-[10px] text-gray-500 leading-relaxed -mt-2 mb-4">
+                                                The cloud voice is locked on this server: set
+                                                <span class="font-mono">DJ_ACCESS_CODE</span> in its environment
+                                                variables.
+                                            </p>
+                                            <p v-else-if="!dj.cloudConfigured"
                                                 class="text-[10px] text-gray-500 leading-relaxed -mt-2 mb-4">
                                                 Cloud voice: get a free Deepgram key ($200 credit, no card) and put it
                                                 in <span class="font-mono">.env</span> as
@@ -548,8 +567,8 @@
                                 <!-- Upload Area -->
                                 <div class="p-3 bg-gray-950 border-t border-white/5 space-y-3">
 
-                                    <!-- URL Input (YouTube & SoundCloud) -->
-                                    <div class="flex gap-2">
+                                    <!-- URL Input (YouTube & SoundCloud): only where the downloader routes exist (not in production) -->
+                                    <div v-if="dj.importEnabled" class="flex gap-2">
                                         <UInput v-model="streamUrl" placeholder="Paste YouTube or SoundCloud URL..."
                                             size="xs" color="gray" variant="outline"
                                             class="flex-1 font-mono text-[10px]"
@@ -617,6 +636,7 @@ const toast = useToast()
 
 const player = usePlayerStore();
 const dj = useDjStore();
+const codeInput = ref('');
 const djEngines = computed(() => [
     { value: 'local', label: 'Local (offline, free)' },
     { value: 'cloud', label: dj.cloudAvailable ? 'Cloud (Deepgram, natural voice)' : 'Cloud (needs an API key)', disabled: !dj.cloudAvailable }

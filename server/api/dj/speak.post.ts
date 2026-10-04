@@ -2,11 +2,14 @@ import { defineEventHandler, readBody, createError, setResponseHeader } from 'h3
 import { buildDeepgramTts, deepgramHeaders } from '../../utils/deepgram';
 import { deepgramBase, deepgramKey, requireKey, limit, cloudPost, failure } from '../../utils/cloud';
 import { isWav, pcmToWav } from '../../utils/http';
+import { requireAccess, clientId } from '../../utils/access';
 
 // Speaks one announcement with a Deepgram Aura-2 voice and returns it as a WAV file.
 export default defineEventHandler(async (event) => {
+    requireAccess(event);
     requireKey(deepgramKey(), 'DEEPGRAM_API_KEY');
-    limit('speak', 40);
+    limit('speak', 60);                          // everyone together
+    limit(`speak:${clientId(event)}`, 20);       // one client
 
     const body = await readBody<{ text?: string, voice?: string }>(event);
     const text = String(body?.text ?? '').trim();
